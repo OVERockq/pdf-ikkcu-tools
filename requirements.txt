@@ -1,0 +1,12 @@
+# PDF 암호화 툴 의존성
+# 설치: pip install -r requirements.txt
+
+# PDF 읽기/쓰기 핵심 라이브러리
+pypdf>=4.0.0
+
+# AES-128 / AES-256 / RC4-128 암호화 백엔드
+# pypdf는 아래 중 하나를 자동으로 사용합니다 (둘 다 설치 불필요)
+# - cryptography : 권장, 최신 OpenSSL 기반 (AES-CBC, AES-ECB, ARC4 지원)
+# - pycryptodome  : 대안, 순수 Python 구현
+cryptography>=41.0.0
+# pycryptodome>=3.19.0  # cryptography 대신 사용할 경우 주석 해제

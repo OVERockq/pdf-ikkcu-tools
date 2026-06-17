@@ -1,0 +1,15 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+
+.build-cache/
+build/*/
+dist/
+*.spec
+*.dmg
+
+.venv/
+venv/
+
+.claude/
+ai-memory/
