@@ -15,6 +15,10 @@ class PDFIkkcuHelpersTest(unittest.TestCase):
         self.assertGreaterEqual(pdf_ikkcu.FS, 10)
         self.assertGreater(pdf_ikkcu.FS_TTL, pdf_ikkcu.FS)
 
+    def test_button_text_color_returns_visible_color(self):
+        self.assertNotEqual(pdf_ikkcu.button_text_color("white"), "")
+        self.assertEqual(pdf_ikkcu.button_text_color("#111827"), "#111827")
+
     def test_current_process_exit_helper_exists(self):
         self.assertTrue(callable(pdf_ikkcu.PDFIkkcu._force_exit_current_process))
 

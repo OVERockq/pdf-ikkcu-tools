@@ -67,8 +67,14 @@ def apply_display_scaling(root: tk.Tk) -> None:
     except tk.TclError:
         pass
 
+def button_text_color(fg: str) -> str:
+    if sys.platform == "darwin" and fg == "white":
+        return C["text"]
+    return fg
+
 # ── helpers ──────────────────────────────────────────────────
 def hbtn(parent, text, cmd, bg, bgh, fg="white", **kw) -> tk.Button:
+    fg = button_text_color(fg)
     kw.setdefault("padx", 14); kw.setdefault("pady", 8)
     b = tk.Button(parent, text=text, command=cmd, font=F_B,
                   bg=bg, fg=fg, relief="flat", bd=0, cursor="hand2",

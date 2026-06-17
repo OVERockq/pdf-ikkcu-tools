@@ -47,8 +47,10 @@ bash build/build_mac.sh
 
 Output:
 
-- `dist/PDF ikkcu.app`
-- `PDF_ikkcu_mac.dmg`
+- `dist/macos-arm64/PDF ikkcu.app`
+- `dist/macos-x86_64/PDF ikkcu.app`
+- `PDF_ikkcu_mac_arm64.dmg`
+- `PDF_ikkcu_mac_x86_64.dmg`
 
 Linux amd64:
 
