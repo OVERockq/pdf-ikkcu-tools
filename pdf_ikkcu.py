@@ -25,6 +25,10 @@ import fitz                               # type: ignore  (pymupdf)
 from PIL import Image, ImageTk            # type: ignore
 
 # ── tokens ───────────────────────────────────────────────────
+# ▼ Buy Me a Coffee 사용자명을 여기서 변경하세요
+BMC_URL = "https://buymeacoffee.com/ikkcu"
+APP_URL  = "https://ikkcu.com"
+
 C = {
     "bg":      "#EEF1F4", "card":    "#FFFFFF", "card_hdr": "#F7F8FA",
     "primary": "#1F6FEB", "pri_h":   "#1557C0", "pri_t":    "#EAF2FF",
@@ -40,7 +44,7 @@ def _ui_family() -> tuple[str, ...]:
     if sys.platform == "darwin":
         return ("Apple SD Gothic Neo",)
     if os.name == "nt":
-        return ("Segoe UI", "Malgun Gothic")
+        return ("Malgun Gothic", "Segoe UI")  # Malgun Gothic: 한영 모두 커버 → 탭 폰트 일관성
     return ("Noto Sans CJK KR", "Noto Sans")
 
 MG = _ui_family()
@@ -49,10 +53,10 @@ def _font_sizes() -> tuple[int, int, int, int]:
     return (13, 12, 18, 14) if sys.platform == "darwin" else (10, 9, 15, 11)
 
 FS, FS_SM, FS_TTL, FS_BTN = _font_sizes()
-F      = (*MG, FS)
-F_B    = (*MG, FS, "bold")
-F_SM   = (*MG, FS_SM)
-F_TTL  = (*MG, FS_TTL, "bold")
+F      = (MG[0], FS)
+F_B    = (MG[0], FS, "bold")
+F_SM   = (MG[0], FS_SM)
+F_TTL  = (MG[0], FS_TTL, "bold")
 
 def _display_scaling_target() -> float:
     return 2.0 if sys.platform == "darwin" else 1.10
@@ -340,7 +344,7 @@ class PDFIkkcu(tk.Tk):
         self.title("PDF ikkcu")
         self.configure(bg=C["bg"])
         self.resizable(True, True)
-        self.minsize(580, 560)
+        self.minsize(860, 600)
         self._merge_files: list[str] = []
         self._show_pw = self._show_pw2 = False
         self._closing = False
@@ -348,8 +352,8 @@ class PDFIkkcu(tk.Tk):
         self._build_ui()
         self.protocol("WM_DELETE_WINDOW", self._on_close)
         self.update_idletasks()
-        w = max(self.winfo_reqwidth(), 600)
-        h = max(self.winfo_reqheight(), 620)
+        w = max(self.winfo_reqwidth(), 1080)
+        h = max(self.winfo_reqheight(), 700)
         x = (self.winfo_screenwidth()  - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
@@ -358,9 +362,6 @@ class PDFIkkcu(tk.Tk):
         if self._closing:
             return
         self._closing = True
-        timer = threading.Timer(0.25, self._force_exit_current_process)
-        timer.daemon = True
-        timer.start()
         try:
             for pb in ("enc_pb", "pg_pb", "mg_pb", "sp_pb", "cp_pb"):
                 widget = getattr(self, pb, None)
@@ -369,11 +370,7 @@ class PDFIkkcu(tk.Tk):
             self.quit()
             self.destroy()
         except tk.TclError:
-            self._force_exit_current_process()
-
-    @staticmethod
-    def _force_exit_current_process():
-        os._exit(0)
+            pass
 
     # ── icon ──────────────────────────────────────────────────
     def _set_icon(self):
@@ -408,7 +405,7 @@ class PDFIkkcu(tk.Tk):
         lf.pack(side="left", padx=22, pady=14)
         tk.Label(lf, text="PDF ikkcu", font=F_TTL,
                  bg=HDR, fg=C["text"]).pack(side="left")
-        tk.Label(lf, text="Document Workbench", font=F_SM,
+        tk.Label(lf, text="PDF Tools", font=F_SM,
                  bg=HDR, fg=HDR_SUB
                  ).pack(side="left", padx=(10, 0))
         tk.Label(lf, text="v1.0", font=F_SM,
@@ -418,7 +415,27 @@ class PDFIkkcu(tk.Tk):
         lnk.pack(side="right", padx=22)
         lnk.bind("<Enter>", lambda _: lnk.config(fg=C["text"]))
         lnk.bind("<Leave>", lambda _: lnk.config(fg=HDR_SUB))
-        lnk.bind("<Button-1>", lambda _: webbrowser.open("https://ikkcu.com"))
+        lnk.bind("<Button-1>", lambda _: webbrowser.open(APP_URL))
+
+        # ── 전체화면 토글 ──────────────────────────────────────
+        self._is_fs = False
+        def _toggle_fs(e=None):
+            self._is_fs = not self._is_fs
+            self.attributes("-fullscreen", self._is_fs)
+            _fs_lbl.config(text="⊡  창 모드" if self._is_fs else "⊡  전체화면")
+        _fs_lbl = tk.Label(hdr, text="⊡  전체화면", font=F_SM,
+                            bg=HDR, fg=HDR_SUB, cursor="hand2", padx=10)
+        _fs_lbl.pack(side="right", padx=(0, 6))
+        _fs_lbl.bind("<Button-1>", _toggle_fs)
+        _fs_lbl.bind("<Enter>", lambda _: _fs_lbl.config(fg=C["text"]))
+        _fs_lbl.bind("<Leave>", lambda _: _fs_lbl.config(fg=HDR_SUB))
+        self.bind("<F11>", _toggle_fs)
+        self.bind("<Escape>", lambda e: (
+            setattr(self, "_is_fs", False),
+            self.attributes("-fullscreen", False),
+            _fs_lbl.config(text="⊡  전체화면"),
+        ))
+
         tk.Frame(self, bg=C["border"], height=1).pack(fill="x")
 
         foot = tk.Frame(self, bg=C["bg"])
@@ -433,13 +450,48 @@ class PDFIkkcu(tk.Tk):
                                ("페이지 편집", self._build_pg_tab),
                                ("병합",      self._build_mg_tab),
                                ("나누기",    self._build_sp_tab),
-                               ("압축",      self._build_cp_tab)]:
+                               ("압축",      self._build_cp_tab),
+                               ("도장/서명", self._build_stamp_tab),
+                               ("정보",      self._build_about_tab)]:
             builder(nb.add(f"  {name}  "))
 
     def _tab_frame(self, parent) -> tk.Frame:
-        f = tk.Frame(parent, bg=C["bg"], padx=16, pady=14)
-        f.pack(fill="both", expand=True)
-        return f
+        """스크롤 가능한 탭 컨테이너를 반환합니다."""
+        outer = tk.Frame(parent, bg=C["bg"])
+        outer.pack(fill="both", expand=True)
+
+        canvas = tk.Canvas(outer, bg=C["bg"], highlightthickness=0, bd=0)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = tk.Frame(canvas, bg=C["bg"], padx=16, pady=14)
+        win_id = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def _on_frame_configure(event):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def _on_canvas_configure(event):
+            canvas.itemconfig(win_id, width=event.width)
+
+        def _on_enter(event):
+            canvas.bind_all("<MouseWheel>",  lambda e: canvas.yview_scroll(int(-1*(e.delta/120)), "units"))
+            canvas.bind_all("<Button-4>",    lambda e: canvas.yview_scroll(-1, "units"))
+            canvas.bind_all("<Button-5>",    lambda e: canvas.yview_scroll( 1, "units"))
+
+        def _on_leave(event):
+            canvas.unbind_all("<MouseWheel>")
+            canvas.unbind_all("<Button-4>")
+            canvas.unbind_all("<Button-5>")
+
+        inner.bind("<Configure>", _on_frame_configure)
+        canvas.bind("<Configure>", _on_canvas_configure)
+        canvas.bind("<Enter>", _on_enter)
+        canvas.bind("<Leave>", _on_leave)
+
+        return inner
 
     def _status_row(self, parent, sv: tk.StringVar, pb_attr: str):
         pb = mkpb(parent)
@@ -450,7 +502,7 @@ class PDFIkkcu(tk.Tk):
 
     def _save_btn(self, parent, text: str, cmd) -> tk.Button:
         b = hbtn(parent, text, cmd, C["success"], C["suc_h"])
-        b.config(font=(*MG, FS_BTN, "bold"), pady=11)
+        b.config(font=(MG[0], FS_BTN, "bold"), pady=11)
         b.pack(fill="x")
         return b
 
@@ -460,7 +512,7 @@ class PDFIkkcu(tk.Tk):
         hbtn(parent, "찾아보기", browse_cmd,
              C["primary"], C["pri_h"], padx=10, pady=6).grid(row=0, column=1)
 
-    # ── TAB: 암호화 ───────────────────────────────────────────
+    # ── TAB: 암호화 & 권한 제한 ──────────────────────────────
     def _build_enc_tab(self, parent):
         f = self._tab_frame(parent)
 
@@ -468,8 +520,70 @@ class PDFIkkcu(tk.Tk):
         self.enc_file_var = tk.StringVar()
         self._file_row(c.body, self.enc_file_var, self._enc_browse)
 
-        c2 = SectionCard(f, "비밀번호 설정"); c2.pack(fill="x", pady=(0, 10))
-        self._pw_section(c2.body)
+        self._c2_pw = SectionCard(f, "열람 비밀번호"); self._c2_pw.pack(fill="x", pady=(0, 10))
+        # hint는 pack, _pw_section은 grid → 같은 부모에 혼용 불가
+        # → hint를 body에 pack하고, pw 입력 영역은 별도 inner frame에 grid
+        self._pw_hint = tk.Label(self._c2_pw.body, text="", font=F_SM,
+                                 bg=C["card"], fg=C["sub"])
+        self._pw_hint.pack(anchor="w")
+        _pw_inner = tk.Frame(self._c2_pw.body, bg=C["card"])
+        _pw_inner.pack(fill="x")
+        self._pw_section(_pw_inner)
+
+        # ── 권한 제한 (선택 옵션)
+        c_perm = SectionCard(f, "권한 제한"); c_perm.pack(fill="x", pady=(0, 10))
+        self.enc_use_perms = tk.BooleanVar(value=False)
+        tk.Checkbutton(c_perm.body,
+                       text="권한 제한 적용  (소유자 비밀번호로 제어)",
+                       variable=self.enc_use_perms,
+                       font=F, bg=C["card"], fg=C["text"],
+                       activebackground=C["card"], selectcolor=C["card"],
+                       command=self._enc_perm_toggle
+                       ).pack(anchor="w", pady=(0, 4))
+
+        self._enc_perm_frame = tk.Frame(c_perm.body, bg=C["card"])
+        self._enc_perm_frame.columnconfigure(0, weight=1)
+
+        tk.Label(self._enc_perm_frame, text="소유자 비밀번호",
+                 font=F_SM, bg=C["card"], fg=C["sub"]
+                 ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 3))
+        self.enc_ow_var = tk.StringVar()
+        self._enc_ow_e = centry(self._enc_perm_frame, self.enc_ow_var)
+        self._enc_ow_e.config(show="*")
+        self._enc_ow_e.grid(row=1, column=0, sticky="ew", padx=(0, 8))
+        self._make_eye_btn(self._enc_perm_frame, self._enc_ow_e).grid(row=1, column=1)
+
+        tk.Label(self._enc_perm_frame,
+                 text="비워두면 권한 보호용 비밀번호가 자동 생성됩니다. (사용자 PW와 같으면 오류)",
+                 font=F_SM, bg=C["card"], fg=C["muted"]
+                 ).grid(row=2, column=0, columnspan=2, sticky="w", pady=(4, 10))
+
+        self.enc_perm_print    = tk.BooleanVar(value=True)
+        self.enc_perm_print_hq = tk.BooleanVar(value=True)
+        self.enc_perm_copy     = tk.BooleanVar(value=True)
+        self.enc_perm_modify   = tk.BooleanVar(value=False)
+        self.enc_perm_annot    = tk.BooleanVar(value=True)
+        self.enc_perm_form     = tk.BooleanVar(value=True)
+        self.enc_perm_assemble = tk.BooleanVar(value=False)
+        _pitems = [
+            ("인쇄 허용",       self.enc_perm_print),
+            ("고품질 인쇄 허용", self.enc_perm_print_hq),
+            ("텍스트 복사 허용", self.enc_perm_copy),
+            ("내용 수정 허용",   self.enc_perm_modify),
+            ("주석 추가 허용",   self.enc_perm_annot),
+            ("양식 입력 허용",   self.enc_perm_form),
+            ("페이지 조립 허용", self.enc_perm_assemble),
+        ]
+        cb_f = tk.Frame(self._enc_perm_frame, bg=C["card"])
+        cb_f.grid(row=3, column=0, columnspan=2, sticky="w")
+        for i, (lbl, var) in enumerate(_pitems):
+            tk.Checkbutton(cb_f, text=lbl, variable=var,
+                           font=F, bg=C["card"], fg=C["text"],
+                           activebackground=C["card"], selectcolor=C["card"]
+                           ).grid(row=i // 2, column=i % 2, sticky="w",
+                                  padx=(0, 18), pady=2)
+        # hidden until toggle is on
+        # (self._enc_perm_frame not packed here)
 
         c3 = SectionCard(f, "암호화 강도"); c3.pack(fill="x", pady=(0, 10))
         self.algo_var = tk.StringVar(value="AES-256")
@@ -748,6 +862,30 @@ class PDFIkkcu(tk.Tk):
                            activebackground=C["card"], selectcolor=C["card"]
                            ).pack(side="left", padx=(8,0))
 
+        c2b = SectionCard(f, "이미지 해상도 조정"); c2b.pack(fill="x", pady=(0, 10))
+        ib = c2b.body
+        self.cp_img_resize = tk.BooleanVar(value=False)
+        img_chk = tk.Checkbutton(ib, text="이미지 DPI 다운샘플링 적용",
+                                  variable=self.cp_img_resize, font=F,
+                                  bg=C["card"], fg=C["text"],
+                                  activebackground=C["card"], selectcolor=C["card"],
+                                  command=self._cp_toggle_dpi)
+        img_chk.grid(row=0, column=0, columnspan=4, sticky="w", pady=(0, 6))
+        self._cp_dpi_frame = tk.Frame(ib, bg=C["card"])
+        self._cp_dpi_frame.grid(row=1, column=0, columnspan=4, sticky="w")
+        tk.Label(self._cp_dpi_frame, text="최대 DPI:", font=F,
+                 bg=C["card"], fg=C["text"]).pack(side="left")
+        self.cp_dpi = tk.IntVar(value=150)
+        for dpi, lbl in [(300, "300  (고품질)"), (150, "150  (균형)"), (96, "96  (소형화)")]:
+            tk.Radiobutton(self._cp_dpi_frame, text=lbl, variable=self.cp_dpi, value=dpi,
+                           font=F_SM, bg=C["card"], fg=C["text"],
+                           activebackground=C["card"], selectcolor=C["card"]
+                           ).pack(side="left", padx=(8, 0))
+        tk.Label(self._cp_dpi_frame,
+                 text="  ※ 텍스트·벡터는 유지됩니다",
+                 font=F_SM, bg=C["card"], fg=C["muted"]).pack(side="left", padx=(12, 0))
+        self._cp_toggle_dpi()  # 초기 상태 반영
+
         c3 = SectionCard(f, "저장 위치"); c3.pack(fill="x", pady=(0, 10))
         b3 = c3.body; b3.columnconfigure(0, weight=1)
         self.cp_out_var = tk.StringVar()
@@ -758,6 +896,15 @@ class PDFIkkcu(tk.Tk):
 
         self.cp_sv = tk.StringVar(value="PDF 파일을 선택하세요.")
         self._status_row(f, self.cp_sv, "cp_pb")
+
+        # 압축 후 열기 옵션
+        self.cp_open_after = tk.BooleanVar(value=False)
+        tk.Checkbutton(f, text="압축 완료 후 파일 열기",
+                       variable=self.cp_open_after, font=F_SM,
+                       bg=C["bg"], fg=C["sub"],
+                       activebackground=C["bg"], selectcolor=C["bg"]
+                       ).pack(anchor="w", pady=(0, 6))
+
         self._save_btn(f, "  압축하여 저장", self._cp_start)
 
     # ── shared utils ──────────────────────────────────────────
@@ -835,25 +982,89 @@ class PDFIkkcu(tk.Tk):
             base, ext = os.path.splitext(p)
             self.enc_out_var.set(base + "_encrypted" + ext)
 
+    def _enc_perm_toggle(self):
+        if self.enc_use_perms.get():
+            self._enc_perm_frame.pack(fill="x", pady=(0, 4))
+            self._pw_hint.config(
+                text="💡 권한 제한 모드: 비워두면 암호 없이 열람 가능 (편집·출력만 제한)",
+                fg=C["primary"]
+            )
+        else:
+            self._enc_perm_frame.pack_forget()
+            self._pw_hint.config(text="")
+
     def _enc_start(self):
+        from pypdf.constants import UserAccessPermissions
         src = self.enc_file_var.get().strip()
         pw1, pw2 = self.pw_var.get(), self.pw2_var.get()
         out = self.enc_out_var.get().strip()
+        use_perms = self.enc_use_perms.get()
+
         if not src or not os.path.isfile(src):
             messagebox.showerror("오류", "유효한 PDF 파일을 선택하세요."); return
-        if not pw1: messagebox.showerror("오류", "비밀번호를 입력하세요."); return
-        if pw1 != pw2: messagebox.showerror("오류", "비밀번호가 일치하지 않습니다."); return
-        if not out: messagebox.showerror("오류", "저장 위치를 지정하세요."); return
-        self._thread(self._enc_run, src, pw1, out, self.algo_var.get())
+        if not out:
+            messagebox.showerror("오류", "저장 위치를 지정하세요."); return
 
-    def _enc_run(self, src, pw, out, algo):
+        # ── 비밀번호 검증 ────────────────────────────────────────
+        if not use_perms:
+            # 일반 암호화: 사용자 비밀번호 필수
+            if not pw1:
+                messagebox.showerror("오류", "비밀번호를 입력하세요."); return
+            if pw1 != pw2:
+                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다."); return
+            owner_pw = pw1
+        else:
+            # 권한 제한 모드:
+            #   - 소유자 PW: 비워두면 랜덤 생성 (사용자 PW와 반드시 달라야 함)
+            #   - 사용자 PW: 선택 (비워두면 암호 없이 열림)
+            import secrets
+            owner_pw = self.enc_ow_var.get().strip()
+            if not owner_pw:
+                # 비어 있으면 랜덤 생성 — 사용자 PW와 같으면 권한이 무시되므로
+                # 절대 같아질 수 없도록 UUID 기반으로 생성
+                owner_pw = secrets.token_hex(16)
+            elif owner_pw == pw1:
+                # 소유자 PW = 사용자 PW이면 PDF 뷰어가 소유자 모드로 열어 권한 무시
+                messagebox.showerror("오류",
+                    "소유자 비밀번호가 사용자 비밀번호와 동일합니다.\n"
+                    "권한 제한을 적용하려면 서로 다른 비밀번호를 사용하세요."); return
+            if pw1 and pw1 != pw2:
+                messagebox.showerror("오류", "비밀번호가 일치하지 않습니다."); return
+
+        perm_flags = None
+        if use_perms:
+            # 양수 방식으로 권한 플래그 계산 (~ 연산자의 정밀도 이슈 방지)
+            _P = UserAccessPermissions
+            _all_user_bits = int(
+                _P.PRINT | _P.MODIFY | _P.EXTRACT | _P.ADD_OR_MODIFY |
+                _P.FILL_FORM_FIELDS | _P.EXTRACT_TEXT_AND_GRAPHICS |
+                _P.ASSEMBLE_DOC | _P.PRINT_TO_REPRESENTATION
+            )
+            # 예약 비트(항상 1)만 있는 기반값에서 시작
+            _base = int(_P(4294967292)) & (~_all_user_bits & 0xFFFFFFFF)
+            perm = _base
+            if self.enc_perm_print.get():    perm |= int(_P.PRINT)
+            if self.enc_perm_print_hq.get(): perm |= int(_P.PRINT_TO_REPRESENTATION)
+            if self.enc_perm_copy.get():     perm |= int(_P.EXTRACT)
+            if self.enc_perm_modify.get():   perm |= int(_P.MODIFY)
+            if self.enc_perm_annot.get():    perm |= int(_P.ADD_OR_MODIFY)
+            if self.enc_perm_form.get():     perm |= int(_P.FILL_FORM_FIELDS)
+            if self.enc_perm_assemble.get(): perm |= int(_P.ASSEMBLE_DOC)
+            perm_flags = _P(perm)
+
+        self._thread(self._enc_run, src, pw1, out, self.algo_var.get(), owner_pw, perm_flags)
+
+    def _enc_run(self, src, pw, out, algo, owner_pw, perm_flags):
         self.after(0, self.enc_pb.start, 10)
         self.after(0, self.enc_sv.set, "암호화 진행 중...")
         try:
             r = self._reader(src); w = PdfWriter()
             for pg in r.pages: w.add_page(pg)
             if r.metadata: w.add_metadata(dict(r.metadata))
-            w.encrypt(user_password=pw, owner_password=pw, algorithm=algo)
+            kw: dict = dict(user_password=pw, owner_password=owner_pw, algorithm=algo)
+            if perm_flags is not None:
+                kw["permissions_flag"] = perm_flags
+            w.encrypt(**kw)
             with open(out, "wb") as fh: w.write(fh)
             self.after(0, self._ok, self.enc_pb, self.enc_sv,
                        "완료", f"암호화 완료!\n\n저장 위치:\n{out}")
@@ -988,9 +1199,11 @@ class PDFIkkcu(tk.Tk):
         self.after(0, self.mg_sv.set, "병합 중...")
         try:
             w = PdfWriter()
+            readers = []  # write 완료 전까지 모든 reader를 살려둠
             for p in files:
                 r = self._reader(p)
-                for pg in r.pages: w.add_page(pg)
+                readers.append(r)
+                w.append(r)  # add_page 대신 append() — 크로스 레퍼런스·리소스 전체 복사
             with open(out, "wb") as fh: w.write(fh)
             self.after(0, self._ok, self.mg_pb, self.mg_sv,
                        "완료", f"병합 완료! ({len(files)}개 파일)\n\n저장 위치:\n{out}")
@@ -1079,6 +1292,12 @@ class PDFIkkcu(tk.Tk):
             self.after(0, self._err, self.sp_pb, self.sp_sv, e)
 
     # ── 압축 handlers ─────────────────────────────────────────
+    def _cp_toggle_dpi(self):
+        state = "normal" if self.cp_img_resize.get() else "disabled"
+        for w in self._cp_dpi_frame.winfo_children():
+            try: w.config(state=state)
+            except tk.TclError: pass
+
     def _cp_browse(self):
         p = self._open_pdf()
         if not p: return
@@ -1101,36 +1320,690 @@ class PDFIkkcu(tk.Tk):
         if not out: messagebox.showerror("오류", "저장 위치를 지정하세요."); return
         self._thread(self._cp_run, src, out,
                      self.cp_streams.get(), self.cp_dedup.get(),
-                     self.cp_meta.get(), self.cp_level.get())
+                     self.cp_meta.get(), self.cp_level.get(),
+                     self.cp_img_resize.get(), self.cp_dpi.get(),
+                     self.cp_open_after.get())
 
-    def _cp_run(self, src, out, streams, dedup, rm_meta, level):
+    def _cp_run(self, src, out, streams, dedup, rm_meta, level, img_resize, max_dpi, open_after=False):
         self.after(0, self.cp_pb.start, 10)
         self.after(0, self.cp_sv.set, "압축 중...")
         try:
-            r = self._reader(src); w = PdfWriter()
-            for pg in r.pages:
-                if streams: pg.compress_content_streams(level=level)
-                w.add_page(pg)
-            if not rm_meta and r.metadata:
-                w.add_metadata(dict(r.metadata))
-            if dedup:
-                w.compress_identical_objects(remove_identicals=True, remove_orphans=True)
-            with open(out, "wb") as fh: w.write(fh)
+            import io as _io
+            fitz.TOOLS.mupdf_display_errors(False)
+
+            # ── fitz 단일 엔진으로 통합 ──────────────────────────────────
+            # fitz.save() 파라미터:
+            #   deflate=True       : 미압축 스트림만 FlateDecode 적용 (이미 압축된 스트림 건너뜀)
+            #   deflate_images=False: JPEG 등 이미 압축된 이미지 스트림 재압축 안 함
+            #   deflate_fonts=True : 미압축 폰트 스트림만 압축
+            #   garbage=4          : 미참조·중복 객체 제거 (dedup 역할)
+            #   clean=True         : xref 테이블 재구성으로 손상된 참조 복구
+            doc = fitz.open(src)
+
+            # 이미지 DPI 다운샘플링
+            if img_resize:
+                seen: set[int] = set()
+                for page in doc:
+                    for img_info in page.get_images(full=True):
+                        xref = img_info[0]
+                        if xref in seen:
+                            continue
+                        seen.add(xref)
+                        try:
+                            # fitz.Pixmap(doc, xref): /Decode 배열·컬러스페이스 모두 적용
+                            # → extract_image() 대신 사용해야 색상 반전 방지
+                            pix_src = fitz.Pixmap(doc, xref)
+
+                            # CMYK·Gray·Indexed 등 RGB 외 컬러스페이스 변환
+                            if pix_src.colorspace and pix_src.colorspace != fitz.csRGB:
+                                pix_src = fitz.Pixmap(fitz.csRGB, pix_src)
+
+                            w_px, h_px = pix_src.width, pix_src.height
+                            rect = page.rect
+                            est_dpi = max(
+                                w_px / max(rect.width  / 72, 0.01),
+                                h_px / max(rect.height / 72, 0.01),
+                            )
+                            if est_dpi <= max_dpi:
+                                continue
+
+                            scale = max_dpi / est_dpi
+                            new_w = max(1, int(w_px * scale))
+                            new_h = max(1, int(h_px * scale))
+
+                            # fitz → PIL (PNG 경유: 알파 채널 보존)
+                            img = Image.open(_io.BytesIO(pix_src.tobytes("png")))
+
+                            # 알파 채널 처리: 흰색 배경으로 합성 (JPEG는 투명 미지원)
+                            if img.mode in ("RGBA", "LA"):
+                                bg = Image.new("RGB", img.size, (255, 255, 255))
+                                bg.paste(img, mask=img.split()[-1])
+                                img = bg
+                            elif img.mode != "RGB":
+                                img = img.convert("RGB")
+
+                            img = img.resize((new_w, new_h), Image.LANCZOS)
+                            buf = _io.BytesIO()
+                            img.save(buf, format="JPEG", quality=85, optimize=True)
+                            page.replace_image(xref, pixmap=fitz.Pixmap(_io.BytesIO(buf.getvalue())))
+                        except Exception:
+                            continue
+
+            # 메타데이터 제거
+            if rm_meta:
+                doc.set_metadata({})
+
+            doc.save(
+                out,
+                garbage=4 if dedup else 1,   # 4=중복·미참조 객체 완전 제거
+                deflate=streams,              # 미압축 스트림만 FlateDecode (이미 압축된 건 스킵)
+                deflate_images=False,         # JPEG/PNG 등 이미 압축된 이미지 재압축 방지
+                deflate_fonts=streams,        # 폰트 스트림도 동일 정책
+                clean=True,                   # xref 재구성
+                no_new_id=True,
+            )
+            doc.close()
+
             orig_kb = os.path.getsize(src) / 1024
             out_kb  = os.path.getsize(out) / 1024
-            ratio   = (1 - out_kb/orig_kb) * 100 if orig_kb else 0
+            ratio   = (1 - out_kb / orig_kb) * 100 if orig_kb else 0
             msg = (f"압축 완료!\n\n원본:  {orig_kb:.1f} KB\n"
                    f"결과:  {out_kb:.1f} KB\n절감:  {ratio:.1f}%\n\n저장 위치:\n{out}")
             self.after(0, self.cp_pb.stop)
             self.after(0, self.cp_sv.set,
                        f"완료: {orig_kb:.1f} KB → {out_kb:.1f} KB ({ratio:.1f}% 절감)")
             self.after(0, messagebox.showinfo, "완료", msg)
+            if open_after:
+                import subprocess
+                self.after(200, lambda: subprocess.Popen(
+                    ["cmd", "/c", "start", "", out] if os.name == "nt"
+                    else ["open", out] if sys.platform == "darwin"
+                    else ["xdg-open", out]
+                ))
         except Exception as e:
             self.after(0, self._err, self.cp_pb, self.cp_sv, e)
 
 
+    # ── TAB: 정보 ─────────────────────────────────────────────
+    @staticmethod
+    def _make_eye_btn(parent, entry: tk.Entry) -> tk.Button:
+        """Show/Hide 토글 버튼을 생성하고 반환합니다."""
+        state = [False]
+        def toggle():
+            state[0] = not state[0]
+            entry.config(show="" if state[0] else "*")
+            btn.config(text="Hide" if state[0] else "Show")
+        btn = hbtn(parent, "Show", toggle,
+                   C["border"], "#CBD5E1", C["text"], padx=10, pady=6)
+        return btn
+
+
+    # ── TAB: 도장/서명 ────────────────────────────────────────
+    _CM_TO_PT  = 28.3465
+    _CV_HDL_R  = 7
+
+    def _build_stamp_tab(self, parent):
+        # parent는 FlatNotebook 프레임 → fill="both", expand=True 로 팩됨
+        # _tab_frame 없이 직접 사용해야 캔버스가 윈도우 크기를 따라 확장됨
+        parent.configure(bg=C["bg"])
+        main = tk.Frame(parent, bg=C["bg"])
+        main.pack(fill="both", expand=True, padx=16, pady=12)
+
+        left  = tk.Frame(main, bg=C["bg"], width=275)
+        left.pack(side="left", fill="y", padx=(0, 12))
+        left.pack_propagate(False)
+
+        right = tk.Frame(main, bg=C["bg"])
+        right.pack(side="left", fill="both", expand=True)
+
+        # ═══ LEFT ══════════════════════════════════════════
+        c1 = SectionCard(left, "PDF 파일"); c1.pack(fill="x", pady=(0, 8))
+        self.stamp_pdf_var = tk.StringVar()
+        self._file_row(c1.body, self.stamp_pdf_var, self._stamp_pdf_browse)
+        self._stamp_pdf_info = tk.Label(c1.body, text="", font=F_SM,
+                                         bg=C["card"], fg=C["sub"])
+        self._stamp_pdf_info.grid(row=1, column=0, columnspan=2,
+                                   sticky="w", pady=(4, 0))
+
+        c2 = SectionCard(left, "도장 / 서명 이미지 (PNG)")
+        c2.pack(fill="x", pady=(0, 8))
+        self.stamp_img_var = tk.StringVar()
+        self._file_row(c2.body, self.stamp_img_var, self._stamp_img_browse)
+        self._stamp_thumb_lbl = tk.Label(
+            c2.body, bg=C["card"],
+            text="이미지를 선택하면\n미리보기가 표시됩니다.",
+            font=F_SM, fg=C["muted"], justify="left")
+        self._stamp_thumb_lbl.grid(row=1, column=0, columnspan=2,
+                                    sticky="w", pady=(8, 0))
+
+        c3 = SectionCard(left, "적용 페이지"); c3.pack(fill="x", pady=(0, 8))
+        self.stamp_pages_mode = tk.StringVar(value="all")
+        _rb = dict(font=F, bg=C["card"],
+                   activebackground=C["card"], selectcolor=C["card"])
+        r1 = tk.Frame(c3.body, bg=C["card"]); r1.pack(anchor="w")
+        tk.Radiobutton(r1, text="모든 페이지",
+                       variable=self.stamp_pages_mode, value="all", **_rb
+                       ).pack(side="left")
+        r2 = tk.Frame(c3.body, bg=C["card"]); r2.pack(anchor="w", pady=4)
+        tk.Radiobutton(r2, text="특정 페이지",
+                       variable=self.stamp_pages_mode, value="custom", **_rb
+                       ).pack(side="left")
+        self.stamp_pages_var = tk.StringVar(value="1")
+        centry(r2, self.stamp_pages_var, width=10
+               ).pack(side="left", padx=(6, 0))
+        tk.Label(r2, text="예: 1,3,5-7", font=F_SM,
+                 bg=C["card"], fg=C["muted"]
+                 ).pack(side="left", padx=(6, 0))
+        r3 = tk.Frame(c3.body, bg=C["card"]); r3.pack(anchor="w")
+        tk.Radiobutton(r3, text="마지막 페이지",
+                       variable=self.stamp_pages_mode, value="last", **_rb
+                       ).pack(side="left")
+
+        c5 = SectionCard(left, "저장 위치"); c5.pack(fill="x", pady=(0, 12))
+        self.stamp_out_var = tk.StringVar()
+        self._file_row(c5.body, self.stamp_out_var,
+                       lambda: self._save_dialog(self.stamp_out_var,
+                                                  self.stamp_pdf_var))
+
+        self.stamp_sv = tk.StringVar(value="PDF와 이미지 파일을 선택하세요.")
+        self._status_row(left, self.stamp_sv, "stamp_pb")
+        self._save_btn(left, "  도장/서명 삽입", self._stamp_start)
+
+        # ═══ RIGHT ═════════════════════════════════════════
+        # 확장형 카드 (SectionCard 대신 직접 구성 — fill="both" 가능하게)
+        rv = tk.Frame(right, bg=C["card"],
+                      highlightbackground=C["border"], highlightthickness=1)
+        rv.pack(fill="both", expand=True)
+
+        # 카드 헤더
+        rv_hdr = tk.Frame(rv, bg=C["card_hdr"])
+        rv_hdr.pack(fill="x")
+        tk.Label(rv_hdr, text="미리보기 · 위치 / 크기 편집",
+                 font=F_B, bg=C["card_hdr"], fg=C["text"],
+                 padx=14, pady=9).pack(side="left")
+
+        # 페이지 선택 + 렌더링 (헤더 오른쪽)
+        pg_row = tk.Frame(rv_hdr, bg=C["card_hdr"]); pg_row.pack(side="right", padx=10)
+        tk.Label(pg_row, text="페이지:", font=F_SM,
+                 bg=C["card_hdr"], fg=C["sub"]).pack(side="left")
+        self._stamp_prev_pg = tk.StringVar(value="1")
+        centry(pg_row, self._stamp_prev_pg, width=4
+               ).pack(side="left", padx=(5, 0))
+        hbtn(pg_row, "렌더링", self._stamp_do_render,
+             C["primary"], C["pri_h"], padx=8, pady=4
+             ).pack(side="left", padx=(6, 0))
+
+        tk.Frame(rv, bg=C["border"], height=1).pack(fill="x")
+
+        # 카드 본문 — 캔버스 + 수치 입력
+        rv_body = tk.Frame(rv, bg=C["card"])
+        rv_body.pack(fill="both", expand=True, padx=12, pady=(10, 10))
+
+        # 힌트 레이블
+        tk.Label(rv_body,
+                 text="도장을 드래그하여 이동  ·  모서리 핸들로 크기 조절",
+                 font=F_SM, bg=C["card"], fg=C["muted"]
+                 ).pack(anchor="w", pady=(0, 6))
+
+        # 캔버스
+        self._stamp_cv = tk.Canvas(rv_body, bg="#555555",
+                                    highlightthickness=1,
+                                    highlightbackground=C["border"],
+                                    cursor="crosshair")
+        self._stamp_cv.pack(fill="both", expand=True, pady=(0, 10))
+        self._stamp_cv.bind("<ButtonPress-1>",  self._cv_press)
+        self._stamp_cv.bind("<B1-Motion>",       self._cv_drag)
+        self._stamp_cv.bind("<ButtonRelease-1>", self._cv_release)
+        self._stamp_cv.bind("<Configure>",
+                             lambda e: self.after(60, self._stamp_do_render))
+
+        # 수치 입력 행 (캔버스 아래 고정)
+        self.stamp_x_var      = tk.StringVar(value="1.0")
+        self.stamp_y_var      = tk.StringVar(value="1.0")
+        self.stamp_w_var      = tk.StringVar(value="3.0")
+        self.stamp_h_var      = tk.StringVar(value="3.0")
+        self.stamp_lock_ratio = tk.BooleanVar(value=True)
+        self._stamp_aspect    = [1.0]
+        self._stamp_upd_flag  = [False]
+
+        nr = tk.Frame(rv_body, bg=C["card"]); nr.pack(anchor="w")
+        lbl_cfg = dict(font=F_SM, bg=C["card"], fg=C["sub"])
+        for col, (lbl, var) in enumerate([
+            ("X", self.stamp_x_var), ("Y", self.stamp_y_var),
+            ("너비", self.stamp_w_var), ("높이", self.stamp_h_var),
+        ]):
+            tk.Label(nr, text=lbl, **lbl_cfg).grid(
+                row=0, column=col * 3, sticky="e",
+                padx=(20 if col else 0, 3))
+            centry(nr, var, width=6).grid(row=0, column=col * 3 + 1)
+            tk.Label(nr, text="cm", **lbl_cfg).grid(
+                row=0, column=col * 3 + 2, sticky="w", padx=(2, 0))
+        tk.Checkbutton(nr, text="비율 고정",
+                       variable=self.stamp_lock_ratio,
+                       font=F_SM, bg=C["card"], fg=C["sub"],
+                       activebackground=C["card"], selectcolor=C["card"]
+                       ).grid(row=0, column=12, padx=(14, 0))
+
+        self.stamp_w_var.trace_add("write", lambda *_: self._stamp_w_changed())
+        self.stamp_h_var.trace_add("write", lambda *_: self._stamp_h_changed())
+        for v in (self.stamp_x_var, self.stamp_y_var,
+                  self.stamp_w_var, self.stamp_h_var):
+            v.trace_add("write", lambda *_: self._stamp_cv_refresh())
+
+        # 캔버스 내부 상태
+        self._cv_scale      = 1.0
+        self._cv_off_x      = 0.0
+        self._cv_off_y      = 0.0
+        self._cv_page_w     = 595.0
+        self._cv_page_h     = 842.0
+        self._cv_drag_mode  = None
+        self._cv_drag_start = (0, 0)
+        self._cv_drag_base  = (1.0, 1.0, 3.0, 3.0)
+        self._cv_page_tk    = None
+        self._cv_stamp_tk   = None
+        self._cv_stamp_pil  = None
+
+    # ── 도장/서명 handlers ────────────────────────────────────
+    def _stamp_pdf_browse(self):
+        p = self._open_pdf()
+        if not p: return
+        self.stamp_pdf_var.set(p)
+        base, ext = os.path.splitext(p)
+        self.stamp_out_var.set(base + "_stamped" + ext)
+        try:
+            n = len(self._reader(p).pages)
+            self._stamp_pdf_info.config(text=f"총 {n}페이지")
+        except Exception:
+            pass
+        self.after(120, self._stamp_do_render)
+
+    def _stamp_img_browse(self):
+        path = filedialog.askopenfilename(
+            title="도장/서명 이미지 선택",
+            filetypes=[("PNG 이미지", "*.png"),
+                       ("이미지 파일", "*.png *.jpg *.jpeg *.bmp *.gif"),
+                       ("모든 파일",   "*.*")])
+        if not path: return
+        self.stamp_img_var.set(path)
+        self._cv_stamp_pil = None
+        try:
+            img = Image.open(path).convert("RGBA")
+            w, h = img.size
+            self._stamp_aspect[0] = w / h if h > 0 else 1.0
+            try:
+                w_cm = float(self.stamp_w_var.get())
+                self._stamp_upd_flag[0] = True
+                self.stamp_h_var.set(f"{w_cm / self._stamp_aspect[0]:.2f}")
+                self._stamp_upd_flag[0] = False
+            except Exception:
+                pass
+            thumb = img.copy(); thumb.thumbnail((120, 120))
+            cell = 8; tw, th = thumb.size
+            bg = Image.new("RGB", (tw, th))
+            for cy in range(0, th, cell):
+                for cx in range(0, tw, cell):
+                    col = (255, 255, 255) \
+                          if (cx // cell + cy // cell) % 2 == 0 \
+                          else (204, 204, 204)
+                    for py in range(cy, min(cy + cell, th)):
+                        for px2 in range(cx, min(cx + cell, tw)):
+                            bg.putpixel((px2, py), col)
+            bg.paste(thumb, mask=thumb.split()[3])
+            self._stamp_tk = ImageTk.PhotoImage(bg)
+            self._stamp_thumb_lbl.config(image=self._stamp_tk, text="",
+                                          compound="left")
+        except Exception as e:
+            self._stamp_thumb_lbl.config(image="",
+                                          text=f"미리보기 오류:\n{e}")
+        self.after(120, self._stamp_do_render)
+
+    def _stamp_w_changed(self):
+        if self._stamp_upd_flag[0] or not self.stamp_lock_ratio.get(): return
+        try:
+            w = float(self.stamp_w_var.get())
+            if w > 0:
+                self._stamp_upd_flag[0] = True
+                self.stamp_h_var.set(f"{w / self._stamp_aspect[0]:.2f}")
+        except Exception:
+            pass
+        finally:
+            self._stamp_upd_flag[0] = False
+
+    def _stamp_h_changed(self):
+        if self._stamp_upd_flag[0] or not self.stamp_lock_ratio.get(): return
+        try:
+            h = float(self.stamp_h_var.get())
+            if h > 0:
+                self._stamp_upd_flag[0] = True
+                self.stamp_w_var.set(f"{h * self._stamp_aspect[0]:.2f}")
+        except Exception:
+            pass
+        finally:
+            self._stamp_upd_flag[0] = False
+
+    # ── 좌표 변환 ─────────────────────────────────────────────
+    def _cm_to_cv(self, x_cm: float, y_cm: float):
+        pt = self._CM_TO_PT
+        return (x_cm * pt * self._cv_scale + self._cv_off_x,
+                y_cm * pt * self._cv_scale + self._cv_off_y)
+
+    def _cv_to_cm(self, cx: float, cy: float):
+        pt = self._CM_TO_PT
+        return ((cx - self._cv_off_x) / (self._cv_scale * pt),
+                (cy - self._cv_off_y) / (self._cv_scale * pt))
+
+    # ── 캔버스 렌더링 ─────────────────────────────────────────
+    def _stamp_do_render(self):
+        cv = self._stamp_cv
+        cv.delete("all")
+        cw = cv.winfo_width(); ch = cv.winfo_height()
+        if cw < 10 or ch < 10:
+            return
+
+        src = self.stamp_pdf_var.get().strip()
+        if not src or not os.path.isfile(src):
+            cv.create_text(cw // 2, ch // 2,
+                           text="PDF 파일을 선택하면\n미리보기가 표시됩니다.",
+                           fill="#BBBBBB", font=F_SM, justify="center")
+            return
+
+        try:
+            pg_idx = max(0, int(self._stamp_prev_pg.get() or "1") - 1)
+            doc    = fitz.open(src)
+            pg_idx = min(pg_idx, len(doc) - 1)
+            page   = doc[pg_idx]
+            pw = page.rect.width; ph = page.rect.height
+            pad   = 14
+            scale = min((cw - pad * 2) / pw, (ch - pad * 2) / ph)
+            self._cv_scale  = scale
+            self._cv_page_w = pw; self._cv_page_h = ph
+            rpw = int(pw * scale); rph = int(ph * scale)
+            self._cv_off_x = (cw - rpw) / 2
+            self._cv_off_y = (ch - rph) / 2
+            mat = fitz.Matrix(scale, scale)
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+            pil_pg = Image.frombytes("RGB",
+                                      [pix.width, pix.height], pix.samples)
+            self._cv_page_tk = ImageTk.PhotoImage(pil_pg)
+            doc.close()
+            cv.create_image(self._cv_off_x, self._cv_off_y,
+                            anchor="nw", image=self._cv_page_tk)
+        except Exception as e:
+            cv.create_text(cw // 2, ch // 2,
+                           text=f"렌더링 실패:\n{e}",
+                           fill="#FF8888", font=F_SM, justify="center")
+            return
+
+        img_path = self.stamp_img_var.get().strip()
+        if not img_path or not os.path.isfile(img_path):
+            cv.create_text(cw // 2, ch - 24,
+                           text="이미지를 선택하면 도장 위치가 표시됩니다.",
+                           fill="#AAAAAA", font=F_SM)
+            return
+
+        try:
+            x_cm = float(self.stamp_x_var.get())
+            y_cm = float(self.stamp_y_var.get())
+            w_cm = float(self.stamp_w_var.get())
+            h_cm = float(self.stamp_h_var.get())
+        except ValueError:
+            return
+
+        x0, y0 = self._cm_to_cv(x_cm, y_cm)
+        x1, y1 = self._cm_to_cv(x_cm + w_cm, y_cm + h_cm)
+        sw = max(1, int(x1 - x0)); sh = max(1, int(y1 - y0))
+
+        try:
+            if self._cv_stamp_pil is None:
+                self._cv_stamp_pil = Image.open(img_path).convert("RGBA")
+            rs     = self._cv_stamp_pil.resize((sw, sh), Image.LANCZOS)
+            bg_img = Image.new("RGB", (sw, sh), (210, 210, 210))
+            bg_img.paste(rs, mask=rs.split()[3])
+            self._cv_stamp_tk = ImageTk.PhotoImage(bg_img)
+            cv.create_image(x0, y0, anchor="nw",
+                            image=self._cv_stamp_tk, tags="stamp")
+        except Exception:
+            cv.create_rectangle(x0, y0, x1, y1,
+                                fill="#FF000033", outline="#FF4444",
+                                tags="stamp")
+
+        cv.create_rectangle(x0, y0, x1, y1,
+                            outline="#3B82F6", width=2,
+                            dash=(6, 3), tags="sel_border")
+        hr = self._CV_HDL_R
+        for tag, hx, hy in [("nw", x0, y0), ("ne", x1, y0),
+                              ("sw", x0, y1), ("se", x1, y1)]:
+            cv.create_rectangle(hx - hr, hy - hr, hx + hr, hy + hr,
+                                fill="#3B82F6", outline="#FFFFFF", width=1,
+                                tags=("handle", f"hdl_{tag}"))
+
+    def _stamp_cv_refresh(self):
+        if self._stamp_upd_flag[0]: return
+        if not hasattr(self, "_stamp_cv"): return
+        self._stamp_do_render()
+
+    # ── 드래그/리사이즈 ───────────────────────────────────────
+    def _cv_press(self, event):
+        x, y = event.x, event.y
+        cv   = self._stamp_cv
+        hr   = self._CV_HDL_R + 3
+        for item in reversed(cv.find_overlapping(x-hr, y-hr, x+hr, y+hr)):
+            for tag in cv.gettags(item):
+                if tag.startswith("hdl_"):
+                    self._cv_start_drag(f"resize_{tag[4:]}", x, y)
+                    return
+        for item in reversed(cv.find_overlapping(x-3, y-3, x+3, y+3)):
+            if any(t in cv.gettags(item) for t in ("stamp", "sel_border")):
+                self._cv_start_drag("move", x, y)
+                return
+        self._cv_drag_mode = None
+
+    def _cv_start_drag(self, mode: str, x: int, y: int):
+        self._cv_drag_mode  = mode
+        self._cv_drag_start = (x, y)
+        try:
+            self._cv_drag_base = (
+                float(self.stamp_x_var.get()), float(self.stamp_y_var.get()),
+                float(self.stamp_w_var.get()), float(self.stamp_h_var.get()),
+            )
+        except ValueError:
+            self._cv_drag_mode = None; return
+        self._stamp_cv.config(cursor={
+            "move": "fleur",
+            "resize_se": "size_nw_se", "resize_nw": "size_nw_se",
+            "resize_ne": "size_ne_sw", "resize_sw": "size_ne_sw",
+        }.get(mode, "crosshair"))
+
+    def _cv_drag(self, event):
+        mode = self._cv_drag_mode
+        if not mode: return
+        pt = self._CM_TO_PT; sc = self._cv_scale
+        if sc == 0: return
+        dx = (event.x - self._cv_drag_start[0]) / (sc * pt)
+        dy = (event.y - self._cv_drag_start[1]) / (sc * pt)
+        ox, oy, ow, oh = self._cv_drag_base
+        locked = self.stamp_lock_ratio.get()
+        ar     = max(self._stamp_aspect[0], 0.001)
+        MIN    = 0.2
+        if mode == "move":
+            nx, ny, nw, nh = max(0.0, ox+dx), max(0.0, oy+dy), ow, oh
+        elif mode == "resize_se":
+            nw = max(MIN, ow+dx); nh = (nw/ar) if locked else max(MIN, oh+dy)
+            nx, ny = ox, oy
+        elif mode == "resize_sw":
+            nw = max(MIN, ow-dx); nh = (nw/ar) if locked else max(MIN, oh+dy)
+            nx = ox+ow-nw; ny = oy
+        elif mode == "resize_ne":
+            nw = max(MIN, ow+dx); nh = (nw/ar) if locked else max(MIN, oh-dy)
+            nx = ox; ny = oy+oh-nh
+        elif mode == "resize_nw":
+            nw = max(MIN, ow-dx); nh = (nw/ar) if locked else max(MIN, oh-dy)
+            nx = ox+ow-nw; ny = oy+oh-nh
+        else:
+            return
+        self._stamp_upd_flag[0] = True
+        try:
+            self.stamp_x_var.set(f"{max(0.0, nx):.2f}")
+            self.stamp_y_var.set(f"{max(0.0, ny):.2f}")
+            self.stamp_w_var.set(f"{nw:.2f}")
+            self.stamp_h_var.set(f"{nh:.2f}")
+        finally:
+            self._stamp_upd_flag[0] = False
+        self._stamp_do_render()
+
+    def _cv_release(self, event):
+        self._cv_drag_mode = None
+        self._stamp_cv.config(cursor="crosshair")
+
+    @staticmethod
+    def _parse_pages(s: str) -> list:
+        pages = []
+        for part in s.split(","):
+            part = part.strip()
+            if "-" in part:
+                a, b = part.split("-", 1)
+                pages.extend(range(int(a.strip()), int(b.strip()) + 1))
+            elif part:
+                pages.append(int(part))
+        return sorted(set(pages))
+
+    def _stamp_start(self):
+        import io as _sio
+        src = self.stamp_pdf_var.get().strip()
+        img = self.stamp_img_var.get().strip()
+        out = self.stamp_out_var.get().strip()
+        if not src or not os.path.isfile(src):
+            messagebox.showerror("오류", "유효한 PDF 파일을 선택하세요."); return
+        if not img or not os.path.isfile(img):
+            messagebox.showerror("오류", "이미지 파일을 선택하세요."); return
+        if not out:
+            messagebox.showerror("오류", "저장 위치를 지정하세요."); return
+        try:
+            x_cm = float(self.stamp_x_var.get())
+            y_cm = float(self.stamp_y_var.get())
+            w_cm = float(self.stamp_w_var.get())
+            h_cm = float(self.stamp_h_var.get())
+        except ValueError:
+            messagebox.showerror("오류", "위치/크기 값을 올바르게 입력하세요."); return
+        if w_cm <= 0 or h_cm <= 0:
+            messagebox.showerror("오류", "너비와 높이는 0보다 커야 합니다."); return
+        mode = self.stamp_pages_mode.get()
+        if mode == "last":
+            pages = "last"
+        elif mode == "custom":
+            try:
+                pages = self._parse_pages(self.stamp_pages_var.get())
+                if not pages: raise ValueError
+            except Exception:
+                messagebox.showerror("오류",
+                    "페이지를 올바르게 입력하세요.\n예: 1, 3, 5-7"); return
+        else:
+            pages = None
+        self._thread(self._stamp_run, src, img, out, x_cm, y_cm, w_cm, h_cm, pages)
+
+    def _stamp_run(self, src, img_path, out, x_cm, y_cm, w_cm, h_cm, pages):
+        import io as _sio
+        self.after(0, self.stamp_pb.start, 10)
+        self.after(0, self.stamp_sv.set, "삽입 중...")
+        try:
+            doc   = fitz.open(src); total = len(doc)
+            if pages is None:
+                idxs = list(range(total))
+            elif pages == "last":
+                idxs = [total - 1]
+            else:
+                idxs = [p-1 for p in pages if 1 <= p <= total]
+            pt   = self._CM_TO_PT
+            rect = fitz.Rect(x_cm*pt, y_cm*pt,
+                             (x_cm+w_cm)*pt, (y_cm+h_cm)*pt)
+            pil_img = Image.open(img_path).convert("RGBA")
+            buf = _sio.BytesIO(); pil_img.save(buf, format="PNG")
+            img_bytes = buf.getvalue()
+            for idx in idxs:
+                doc[idx].insert_image(rect, stream=img_bytes, overlay=True)
+            doc.save(out, garbage=1, deflate=True); doc.close()
+            n = len(idxs)
+            self.after(0, self._ok, self.stamp_pb, self.stamp_sv,
+                       "완료",
+                       f"삽입 완료!\n적용 페이지: {n}페이지\n\n저장 위치:\n{out}")
+        except Exception as e:
+            self.after(0, self._err, self.stamp_pb, self.stamp_sv, e)
+
+
+    def _build_about_tab(self, parent):
+        # _tab_frame 없이 parent 직접 사용 → place(relx/rely) 정상 동작
+        parent.configure(bg=C["bg"])
+
+        inner = tk.Frame(parent, bg=C["card"],
+                         highlightbackground=C["border"], highlightthickness=1)
+        inner.place(relx=0.5, rely=0.5, anchor="center", width=460)
+
+        icon_f = tk.Frame(inner, bg=C["primary"], height=76)
+        icon_f.pack(fill="x")
+        tk.Label(icon_f, text="PDF ikkcu", font=(MG[0], 22, "bold"),
+                 bg=C["primary"], fg="white").pack(expand=True, pady=20)
+
+        body = tk.Frame(inner, bg=C["card"])
+        body.pack(fill="x", padx=32, pady=24)
+
+        tk.Label(body, text="Document Workbench  v1.0",
+                 font=(MG[0], FS, "bold"), bg=C["card"], fg=C["text"]
+                 ).pack(anchor="w")
+        tk.Label(body,
+                 text="PDF 암호화 · 페이지 편집 · 병합 · 나누기 · 압축 · 도장 삽입을\n"
+                      "하나의 앱으로 처리하는 무료 PDF 도구입니다.",
+                 font=F_SM, bg=C["card"], fg=C["sub"],
+                 justify="left", wraplength=400
+                 ).pack(anchor="w", pady=(6, 0))
+
+        tk.Frame(body, bg=C["border"], height=1).pack(fill="x", pady=18)
+
+        for label, value, url in [
+            ("개발",     "ikkcu.com",  APP_URL),
+            ("버전",     "1.0.0",      None),
+            ("라이선스", "Freeware",   None),
+        ]:
+            row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=3)
+            tk.Label(row, text=label, font=F_SM, width=9,
+                     bg=C["card"], fg=C["sub"], anchor="w").pack(side="left")
+            if url:
+                lnk = tk.Label(row, text=value,
+                                font=(MG[0], FS_SM, "underline"),
+                                bg=C["card"], fg=C["primary"], cursor="hand2")
+                lnk.pack(side="left")
+                lnk.bind("<Button-1>", lambda _, u=url: webbrowser.open(u))
+            else:
+                tk.Label(row, text=value, font=F_SM,
+                         bg=C["card"], fg=C["text"]).pack(side="left")
+
+        tk.Frame(body, bg=C["border"], height=1).pack(fill="x", pady=18)
+
+        bmc_btn = tk.Button(
+            body, text="  ☕  Buy Me a Coffee",
+            font=(MG[0], FS, "bold"),
+            bg="#FFDD00", fg="#000000",
+            relief="flat", bd=0, padx=18, pady=11,
+            cursor="hand2",
+            activebackground="#F5C800", activeforeground="#000000",
+            command=lambda: webbrowser.open(BMC_URL),
+        )
+        bmc_btn.pack(fill="x")
+        bmc_btn.bind("<Enter>", lambda _: bmc_btn.config(bg="#F5C800"))
+        bmc_btn.bind("<Leave>", lambda _: bmc_btn.config(bg="#FFDD00"))
+
+        tk.Label(body,
+                 text="이 앱이 유용하셨다면 커피 한 잔으로 응원해 주세요 :)",
+                 font=F_SM, bg=C["card"], fg=C["muted"]
+                 ).pack(anchor="center", pady=(8, 0))
+
+        tk.Label(inner, text="© 2025 ikkcu.com — All rights reserved",
+                 font=F_SM, bg=C["card"], fg=C["muted"], pady=12
+                 ).pack()
+
+
+
 if __name__ == "__main__":
     import multiprocessing
-    multiprocessing.freeze_support()   # required for PyInstaller on Windows
+    multiprocessing.freeze_support()
     app = PDFIkkcu()
     app.mainloop()
