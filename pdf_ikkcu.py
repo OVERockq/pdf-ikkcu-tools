@@ -1,4 +1,4 @@
-"""PDF ikkcu — Freeware PDF Tool v1.0"""
+"""PDF.ikkcu Tools — Freeware PDF Tool v1.0"""
 from __future__ import annotations
 import re, os, sys, threading, webbrowser, tkinter as tk
 import tkinter.font as tkfont
@@ -25,8 +25,8 @@ import fitz                               # type: ignore  (pymupdf)
 from PIL import Image, ImageTk            # type: ignore
 
 # ── tokens ───────────────────────────────────────────────────
-# ▼ Buy Me a Coffee 사용자명을 여기서 변경하세요
-BMC_URL = "https://buymeacoffee.com/ikkcu"
+# ▼ Ko-fi 링크
+BMC_URL = "https://ko-fi.com/ikkcu"
 APP_URL  = "https://ikkcu.com"
 
 C = {
@@ -341,7 +341,7 @@ class PDFIkkcu(tk.Tk):
     def __init__(self):
         super().__init__()
         apply_display_scaling(self)
-        self.title("PDF ikkcu")
+        self.title("PDF.ikkcu Tools")
         self.configure(bg=C["bg"])
         self.resizable(True, True)
         self.minsize(860, 600)
@@ -403,11 +403,8 @@ class PDFIkkcu(tk.Tk):
         hdr.pack(fill="x")
         lf = tk.Frame(hdr, bg=HDR)
         lf.pack(side="left", padx=22, pady=14)
-        tk.Label(lf, text="PDF ikkcu", font=F_TTL,
+        tk.Label(lf, text="PDF.ikkcu Tools", font=F_TTL,
                  bg=HDR, fg=C["text"]).pack(side="left")
-        tk.Label(lf, text="PDF Tools", font=F_SM,
-                 bg=HDR, fg=HDR_SUB
-                 ).pack(side="left", padx=(10, 0))
         tk.Label(lf, text="v1.0", font=F_SM,
                  bg=HDR, fg=HDR_SUB).pack(side="left", padx=(8, 0))
         lnk = tk.Label(hdr, text="© ikkcu.com", font=F_SM,
@@ -1940,13 +1937,13 @@ class PDFIkkcu(tk.Tk):
 
         icon_f = tk.Frame(inner, bg=C["primary"], height=76)
         icon_f.pack(fill="x")
-        tk.Label(icon_f, text="PDF ikkcu", font=(MG[0], 22, "bold"),
+        tk.Label(icon_f, text="PDF.ikkcu Tools", font=(MG[0], 22, "bold"),
                  bg=C["primary"], fg="white").pack(expand=True, pady=20)
 
         body = tk.Frame(inner, bg=C["card"])
         body.pack(fill="x", padx=32, pady=24)
 
-        tk.Label(body, text="Document Workbench  v1.0",
+        tk.Label(body, text="PDF.ikkcu Tools",
                  font=(MG[0], FS, "bold"), bg=C["card"], fg=C["text"]
                  ).pack(anchor="w")
         tk.Label(body,
@@ -1979,17 +1976,17 @@ class PDFIkkcu(tk.Tk):
         tk.Frame(body, bg=C["border"], height=1).pack(fill="x", pady=18)
 
         bmc_btn = tk.Button(
-            body, text="  ☕  Buy Me a Coffee",
+            body, text="  ❤️  Ko-fi로 후원하기",
             font=(MG[0], FS, "bold"),
-            bg="#FFDD00", fg="#000000",
+            bg="#FF5E5B", fg="#000000",
             relief="flat", bd=0, padx=18, pady=11,
             cursor="hand2",
-            activebackground="#F5C800", activeforeground="#000000",
+            activebackground="#E04E4B", activeforeground="#000000",
             command=lambda: webbrowser.open(BMC_URL),
         )
         bmc_btn.pack(fill="x")
-        bmc_btn.bind("<Enter>", lambda _: bmc_btn.config(bg="#F5C800"))
-        bmc_btn.bind("<Leave>", lambda _: bmc_btn.config(bg="#FFDD00"))
+        bmc_btn.bind("<Enter>", lambda _: bmc_btn.config(bg="#E04E4B"))
+        bmc_btn.bind("<Leave>", lambda _: bmc_btn.config(bg="#FF5E5B"))
 
         tk.Label(body,
                  text="이 앱이 유용하셨다면 커피 한 잔으로 응원해 주세요 :)",

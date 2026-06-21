@@ -1,74 +1,90 @@
 #!/usr/bin/env bash
-# Build PDF ikkcu for Linux → binary + .deb package
+# Build PDF.ikkcu Tools for Linux (Debian/Ubuntu amd64) → binary + .deb
+# Docker가 필요합니다.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-PKG_NAME="pdf-ikkcu"
+PKG_NAME="pdf-ikkcu-tools"
+APP_NAME="PDF.ikkcu Tools"
 VERSION="1.0.0"
 ARCH="amd64"
-PKG_DIR="dist/${PKG_NAME}_${VERSION}_${ARCH}"
-mkdir -p .build-cache/pip .build-cache/pyinstaller
-export PIP_CACHE_DIR="$PWD/.build-cache/pip"
-export PYINSTALLER_CONFIG_DIR="$PWD/.build-cache/pyinstaller"
+DEB_OUT="${PKG_NAME}_${VERSION}_${ARCH}.deb"
 
-echo "[1/5] Installing dependencies..."
-pip3 install -r build/requirements.txt
+echo "[linux] Building + packaging via Docker (Ubuntu 22.04 / amd64)..."
+docker run --rm \
+  --platform linux/amd64 \
+  -v "$PWD":/work \
+  -w /work \
+  ubuntu:22.04 \
+  bash -c "
+    set -euo pipefail
+    export DEBIAN_FRONTEND=noninteractive
+    apt-get update -qq
+    apt-get install -y --no-install-recommends \
+      python3 python3-pip python3-venv python3-tk \
+      libpython3.10 libpython3.10-dev \
+      libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 \
+      binutils dpkg-dev file > /dev/null 2>&1
 
-echo "[2/5] Building binary..."
-pyinstaller \
-  --onefile \
-  --name pdf_ikkcu \
-  --hidden-import pypdf \
-  --hidden-import fitz \
-  --hidden-import PIL \
-  --hidden-import PIL.Image \
-  --hidden-import PIL.ImageTk \
-  pdf_ikkcu.py
+    pip3 install --quiet -r build/requirements.txt
 
-echo "[3/5] Preparing .deb structure..."
-rm -rf "$PKG_DIR"
-mkdir -p "${PKG_DIR}/usr/local/bin"
-mkdir -p "${PKG_DIR}/usr/share/applications"
-mkdir -p "${PKG_DIR}/usr/share/doc/${PKG_NAME}"
-mkdir -p "${PKG_DIR}/DEBIAN"
+    pyinstaller \
+      --onefile \
+      --name pdf_ikkcu_tools \
+      --hidden-import pypdf \
+      --hidden-import fitz \
+      --hidden-import pymupdf \
+      --hidden-import PIL \
+      --hidden-import PIL.Image \
+      --hidden-import PIL.ImageTk \
+      pdf_ikkcu.py
 
-cp dist/pdf_ikkcu "${PKG_DIR}/usr/local/bin/"
-chmod 755 "${PKG_DIR}/usr/local/bin/pdf_ikkcu"
+    PKG_DIR=\"dist/${PKG_NAME}_${VERSION}_${ARCH}\"
+    rm -rf \"\$PKG_DIR\"
+    mkdir -p \"\${PKG_DIR}/usr/local/bin\"
+    mkdir -p \"\${PKG_DIR}/usr/share/applications\"
+    mkdir -p \"\${PKG_DIR}/usr/share/doc/${PKG_NAME}\"
+    mkdir -p \"\${PKG_DIR}/DEBIAN\"
 
-cat > "${PKG_DIR}/usr/share/applications/pdf-ikkcu.desktop" <<'EOF'
+    cp dist/pdf_ikkcu_tools \"\${PKG_DIR}/usr/local/bin/\"
+    chmod 755 \"\${PKG_DIR}/usr/local/bin/pdf_ikkcu_tools\"
+
+    cat > \"\${PKG_DIR}/usr/share/applications/pdf-ikkcu-tools.desktop\" <<'DESKTOP'
 [Desktop Entry]
-Name=PDF ikkcu
+Name=${APP_NAME}
 GenericName=PDF Tool
 Comment=Free PDF encryption, editing, merging, splitting, compression
-Exec=pdf_ikkcu
+Exec=pdf_ikkcu_tools
 Terminal=false
 Type=Application
 Categories=Office;Utility;
 Keywords=PDF;encrypt;merge;split;compress;
-EOF
+DESKTOP
 
-cat > "${PKG_DIR}/usr/share/doc/${PKG_NAME}/copyright" <<'EOF'
-PDF ikkcu — Freeware PDF Tool
-Copyright 2025 PDF ikkcu contributors
+    cat > \"\${PKG_DIR}/usr/share/doc/${PKG_NAME}/copyright\" <<'CR'
+${APP_NAME} — Freeware PDF Tool
+Copyright 2025 ikkcu.com
 This software is provided as freeware. Free to use, no warranty.
-EOF
+CR
 
-echo "[4/5] Writing DEBIAN/control..."
-INSTALLED_SIZE=$(du -sk "${PKG_DIR}/usr" | cut -f1)
-cat > "${PKG_DIR}/DEBIAN/control" <<EOF
+    INSTALLED_SIZE=\$(du -sk \"\${PKG_DIR}/usr\" | cut -f1)
+    cat > \"\${PKG_DIR}/DEBIAN/control\" <<CTRL
 Package: ${PKG_NAME}
 Version: ${VERSION}
 Section: utils
 Priority: optional
 Architecture: ${ARCH}
-Installed-Size: ${INSTALLED_SIZE}
+Installed-Size: \${INSTALLED_SIZE}
 Depends: libgl1, python3-tk
-Maintainer: PDF ikkcu <noreply@pdf-ikkcu.com>
-Description: PDF ikkcu — Freeware PDF Tool
+Maintainer: ikkcu <noreply@ikkcu.com>
+Description: ${APP_NAME} — Freeware PDF Tool
  Free GUI tool for PDF encryption, page editing with preview,
  merging, splitting, and compression.
-EOF
+CTRL
 
-echo "[5/5] Building .deb..."
-dpkg-deb --build --root-owner-group "$PKG_DIR"
-echo "Output: ${PKG_DIR}.deb"
+    dpkg-deb --build --root-owner-group \"\$PKG_DIR\" \"${DEB_OUT}\"
+    echo '[linux] .deb built successfully.'
+  "
+
+echo "[linux] Output: $DEB_OUT"
+ls -lh "$DEB_OUT"

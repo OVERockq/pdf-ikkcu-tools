@@ -9,15 +9,15 @@ echo [2/3] Building Windows EXE...
 pyinstaller ^
   --onefile ^
   --windowed ^
-  --name "PDF_ikkcu" ^
-  --add-data "pdf_ikkcu.py;." ^
+  --name "PDF.ikkcu_Tools" ^
   --hidden-import pypdf ^
   --hidden-import fitz ^
+  --hidden-import pymupdf ^
   --hidden-import PIL ^
   --hidden-import PIL.Image ^
   --hidden-import PIL.ImageTk ^
   pdf_ikkcu.py
 
 echo [3/3] Done.
-echo Output: dist\PDF_ikkcu.exe
+echo Output: dist\PDF.ikkcu_Tools.exe
 pause
