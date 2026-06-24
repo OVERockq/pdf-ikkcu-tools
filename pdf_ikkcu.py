@@ -443,7 +443,8 @@ class PDFIkkcu(tk.Tk):
         nb = FlatNotebook(self)
         nb.pack(fill="both", expand=True, pady=(0, 6))
 
-        for name, builder in [("암호화",    self._build_enc_tab),
+        for name, builder in [("뷰어",      self._build_vw_tab),
+                               ("암호화",    self._build_enc_tab),
                                ("페이지 편집", self._build_pg_tab),
                                ("병합",      self._build_mg_tab),
                                ("나누기",    self._build_sp_tab),
@@ -508,6 +509,406 @@ class PDFIkkcu(tk.Tk):
         centry(parent, var).grid(row=0, column=0, sticky="ew", padx=(0, 8))
         hbtn(parent, "찾아보기", browse_cmd,
              C["primary"], C["pri_h"], padx=10, pady=6).grid(row=0, column=1)
+
+    # ── TAB: PDF 뷰어 ────────────────────────────────────────
+    def _build_vw_tab(self, parent):
+        parent.configure(bg=C["bg"])
+
+        # viewer state
+        self._vw_doc        = None
+        self._vw_path       = ""
+        self._vw_pg         = 0
+        self._vw_total      = 0
+        self._vw_zoom       = 1.5
+        self._vw_rot        = 0
+        self._vw_photo      = None
+        self._vw_hits: "list[tuple[int, object]]" = []
+        self._vw_hit_pos    = -1
+        self._vw_render_ver = 0
+        self._vw_mat        = fitz.Matrix(1, 1)
+        self._vw_mat_ox     = 0.0
+        self._vw_mat_oy     = 0.0
+        self._vw_resize_id  = None
+        self._vw_toc_shown  = True
+        self._vw_toc_pages: "dict[str, int]" = {}
+
+        # ── toolbar ───────────────────────────────────────────
+        tb = tk.Frame(parent, bg=C["chrome"], pady=5)
+        tb.pack(fill="x")
+        tk.Frame(parent, bg=C["border"], height=1).pack(fill="x")
+
+        def _sep():
+            tk.Frame(tb, bg=C["border"], width=1).pack(
+                side="left", fill="y", padx=4, pady=3)
+
+        def _toc_toggle():
+            if self._vw_toc_shown:
+                self._vw_toc_panel.pack_forget()
+                self._vw_toc_shown = False
+            else:
+                self._vw_toc_panel.pack(
+                    side="left", fill="y", before=self._vw_cv_outer)
+                self._vw_toc_shown = True
+
+        hbtn(tb, "☰ 목차", _toc_toggle, C["border"], "#CBD5E1", C["text"],
+             padx=10, pady=5).pack(side="left", padx=(8, 4))
+        hbtn(tb, "열기", self._vw_open, C["primary"], C["pri_h"],
+             padx=12, pady=5).pack(side="left", padx=4)
+        _sep()
+
+        # Navigation
+        hbtn(tb, "◄", self._vw_prev, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(0, 2))
+        self._vw_pg_var = tk.StringVar()
+        _pg_e = tk.Entry(tb, textvariable=self._vw_pg_var, width=4, font=F,
+                         justify="center", relief="solid", bd=1,
+                         highlightthickness=1, highlightcolor=C["primary"],
+                         highlightbackground=C["border"])
+        _pg_e.pack(side="left", padx=2)
+        _pg_e.bind("<Return>", lambda _: self._vw_goto_entry())
+        self._vw_total_lbl = tk.Label(tb, text="/ —", font=F,
+                                       bg=C["chrome"], fg=C["sub"])
+        self._vw_total_lbl.pack(side="left", padx=(2, 2))
+        hbtn(tb, "►", self._vw_next, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(2, 0))
+        _sep()
+
+        # Zoom
+        hbtn(tb, "−", self._vw_zoom_out, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(0, 2))
+        self._vw_zoom_var = tk.StringVar(value="150%")
+        _zc = ttk.Combobox(tb, textvariable=self._vw_zoom_var, width=7,
+                            values=["50%", "75%", "100%", "125%", "150%",
+                                    "175%", "200%", "250%", "300%",
+                                    "전체 폭", "전체 페이지"],
+                            state="readonly")
+        _zc.pack(side="left", padx=2)
+        _zc.bind("<<ComboboxSelected>>", lambda _: self._vw_zoom_apply())
+        hbtn(tb, "+", self._vw_zoom_in, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(2, 0))
+        _sep()
+
+        # Rotation
+        hbtn(tb, "↺", self._vw_rot_left,  C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(0, 2))
+        hbtn(tb, "↻", self._vw_rot_right, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(2, 0))
+        _sep()
+
+        # Search
+        self._vw_sq_var = tk.StringVar()
+        self._vw_sq_e = centry(tb, self._vw_sq_var, width=16)
+        self._vw_sq_e.pack(side="left", padx=(0, 4))
+        self._vw_sq_e.bind("<Return>", lambda _: self._vw_search())
+        hbtn(tb, "검색", self._vw_search, C["border"], "#CBD5E1", C["text"],
+             padx=8, pady=5).pack(side="left", padx=(0, 2))
+        hbtn(tb, "◄", lambda: self._vw_search_move(-1),
+             C["border"], "#CBD5E1", C["text"], padx=6, pady=5
+             ).pack(side="left", padx=1)
+        hbtn(tb, "►", lambda: self._vw_search_move(+1),
+             C["border"], "#CBD5E1", C["text"], padx=6, pady=5
+             ).pack(side="left", padx=1)
+        self._vw_hit_lbl = tk.Label(tb, text="", font=F_SM,
+                                     bg=C["chrome"], fg=C["sub"])
+        self._vw_hit_lbl.pack(side="left", padx=6)
+        _sep()
+
+        # Copy text
+        hbtn(tb, "텍스트 복사", self._vw_copy_text,
+             C["border"], "#CBD5E1", C["text"],
+             padx=10, pady=5).pack(side="left", padx=(0, 8))
+
+        # ── content area ──────────────────────────────────────
+        content = tk.Frame(parent, bg=C["bg"])
+        content.pack(fill="both", expand=True)
+
+        # TOC panel (left, collapsible)
+        self._vw_toc_panel = tk.Frame(content, bg=C["card"], width=210,
+                                       highlightbackground=C["border"],
+                                       highlightthickness=1)
+        self._vw_toc_panel.pack(side="left", fill="y")
+        self._vw_toc_panel.pack_propagate(False)
+        tk.Label(self._vw_toc_panel, text="목차", font=F_B,
+                 bg=C["card_hdr"], fg=C["text"],
+                 padx=10, pady=8).pack(fill="x")
+        tk.Frame(self._vw_toc_panel, bg=C["border"], height=1).pack(fill="x")
+        _toc_body = tk.Frame(self._vw_toc_panel, bg=C["card"])
+        _toc_body.pack(fill="both", expand=True)
+        self._vw_toc = ttk.Treeview(_toc_body, show="tree",
+                                     selectmode="browse")
+        _toc_vsb = ttk.Scrollbar(_toc_body, orient="vertical",
+                                  command=self._vw_toc.yview)
+        self._vw_toc.config(yscrollcommand=_toc_vsb.set)
+        self._vw_toc.pack(side="left", fill="both", expand=True)
+        _toc_vsb.pack(side="right", fill="y")
+        self._vw_toc.bind("<<TreeviewSelect>>", self._vw_toc_click)
+
+        # Canvas area (right)
+        self._vw_cv_outer = tk.Frame(content, bg=C["bg"])
+        self._vw_cv_outer.pack(side="left", fill="both", expand=True)
+
+        self._vw_cv = tk.Canvas(self._vw_cv_outer, bg="#404040",
+                                 highlightthickness=0, cursor="crosshair",
+                                 takefocus=True)
+        _cv_hsb = ttk.Scrollbar(self._vw_cv_outer, orient="horizontal",
+                                 command=self._vw_cv.xview)
+        _cv_vsb = ttk.Scrollbar(self._vw_cv_outer, orient="vertical",
+                                 command=self._vw_cv.yview)
+        self._vw_cv.config(xscrollcommand=_cv_hsb.set,
+                            yscrollcommand=_cv_vsb.set)
+        _cv_vsb.pack(side="right", fill="y")
+        _cv_hsb.pack(side="bottom", fill="x")
+        self._vw_cv.pack(fill="both", expand=True)
+
+        self._vw_cv.bind("<MouseWheel>",
+            lambda e: self._vw_cv.yview_scroll(int(-e.delta / 120), "units"))
+        self._vw_cv.bind("<Button-4>",
+            lambda e: self._vw_cv.yview_scroll(-1, "units"))
+        self._vw_cv.bind("<Button-5>",
+            lambda e: self._vw_cv.yview_scroll(1, "units"))
+        self._vw_cv.bind("<Control-MouseWheel>", self._vw_ctrl_wheel)
+        self._vw_cv.bind("<Button-1>", lambda e: self._vw_cv.focus_set())
+        self._vw_cv.bind("<Left>",  lambda e: self._vw_prev())
+        self._vw_cv.bind("<Right>", lambda e: self._vw_next())
+        self._vw_cv.bind("<Configure>", self._vw_on_resize)
+
+        self._vw_welcome_id = self._vw_cv.create_text(
+            400, 300,
+            text="열기 버튼으로 PDF를 여세요.",
+            font=F_B, fill="#888888", justify="center")
+
+        # Status bar
+        self._vw_status = tk.StringVar(value="")
+        tk.Label(parent, textvariable=self._vw_status,
+                 font=F_SM, bg=C["bg"], fg=C["sub"],
+                 anchor="w", padx=8
+                 ).pack(fill="x", side="bottom", pady=2)
+
+    def _vw_open(self):
+        p = self._open_pdf()
+        if p: self._vw_load(p)
+
+    def _vw_load(self, path: str):
+        try:
+            doc = fitz.open(path)
+        except Exception as e:
+            messagebox.showerror("오류", f"PDF를 열 수 없습니다:\n{e}"); return
+        if self._vw_doc:
+            try: self._vw_doc.close()
+            except Exception: pass
+        self._vw_doc     = doc
+        self._vw_path    = path
+        self._vw_total   = doc.page_count
+        self._vw_pg      = 0
+        self._vw_rot     = 0
+        self._vw_hits    = []
+        self._vw_hit_pos = -1
+        self._vw_hit_lbl.config(text="")
+        self._vw_sq_var.set("")
+        self._vw_toc_build()
+        self._vw_render()
+
+    def _vw_toc_build(self):
+        self._vw_toc.delete(*self._vw_toc.get_children())
+        self._vw_toc_pages.clear()
+        toc = self._vw_doc.get_toc(simple=True)
+        if not toc:
+            self._vw_toc.insert("", "end", text="(목차 없음)"); return
+        stack: "list[tuple[str, int]]" = [("", 0)]
+        for level, title, page in toc:
+            while len(stack) > 1 and stack[-1][1] >= level:
+                stack.pop()
+            iid = self._vw_toc.insert(
+                stack[-1][0], "end",
+                text=f"{title}  (p.{page})",
+                open=(level <= 2))
+            self._vw_toc_pages[iid] = page - 1
+            stack.append((iid, level))
+
+    def _vw_toc_click(self, _event):
+        sel = self._vw_toc.selection()
+        if sel:
+            pg = self._vw_toc_pages.get(sel[0])
+            if pg is not None: self._vw_goto(pg)
+
+    def _vw_render(self):
+        if not self._vw_doc: return
+        self._vw_render_ver += 1
+        ver = self._vw_render_ver
+        threading.Thread(target=self._vw_render_worker,
+                         args=(ver,), daemon=True).start()
+
+    def _vw_render_worker(self, ver: int):
+        try:
+            if ver != self._vw_render_ver: return
+            page  = self._vw_doc[self._vw_pg]
+            zoom  = self._vw_zoom
+            rot   = self._vw_rot
+            mat   = fitz.Matrix(zoom, zoom).prerotate(rot)
+            pix   = page.get_pixmap(matrix=mat, alpha=False)
+            img   = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+            irect = page.rect * mat
+            if ver == self._vw_render_ver:
+                self.after(0, self._vw_show, ver, img,
+                           pix.width, pix.height, mat, irect.x0, irect.y0)
+        except Exception as e:
+            self.after(0, messagebox.showerror, "렌더 오류", str(e))
+
+    def _vw_show(self, ver: int, img, w: int, h: int,
+                 mat, ox: float, oy: float):
+        if ver != self._vw_render_ver: return
+        self._vw_photo  = ImageTk.PhotoImage(img)
+        self._vw_mat    = mat
+        self._vw_mat_ox = ox
+        self._vw_mat_oy = oy
+        cv  = self._vw_cv
+        cw  = max(cv.winfo_width(), 1)
+        ix  = max(0, (cw - w) // 2)
+        iy  = 8
+        cv.delete("all")
+        cv.create_image(ix, iy, image=self._vw_photo, anchor="nw", tags="page")
+        cv.config(scrollregion=(0, 0, max(cw, w + 16), h + 16))
+        self._vw_draw_hits(ix, iy)
+        pg1 = self._vw_pg + 1
+        self._vw_pg_var.set(str(pg1))
+        self._vw_total_lbl.config(text=f"/ {self._vw_total}")
+        pct = int(self._vw_zoom * 100)
+        self._vw_zoom_var.set(f"{pct}%")
+        fname = os.path.basename(self._vw_path)
+        self._vw_status.set(
+            f"{fname}  —  {pg1} / {self._vw_total}  |  {pct}%  |  회전 {self._vw_rot}°")
+
+    def _vw_draw_hits(self, ix: int, iy: int):
+        cv  = self._vw_cv
+        mat = self._vw_mat
+        ox  = self._vw_mat_ox
+        oy  = self._vw_mat_oy
+        for i, (pg_idx, rect) in enumerate(self._vw_hits):
+            if pg_idx != self._vw_pg: continue
+            r   = rect * mat
+            cur = (i == self._vw_hit_pos)
+            cv.create_rectangle(
+                r.x0 - ox + ix, r.y0 - oy + iy,
+                r.x1 - ox + ix, r.y1 - oy + iy,
+                fill="#FF8C00" if cur else "yellow",
+                stipple="gray50",
+                outline="#E65100" if cur else "#B8860B",
+                tags="hl")
+
+    def _vw_goto(self, idx: int):
+        if not self._vw_doc: return
+        self._vw_pg = max(0, min(idx, self._vw_total - 1))
+        self._vw_render()
+
+    def _vw_goto_entry(self):
+        try:
+            self._vw_goto(int(self._vw_pg_var.get()) - 1)
+        except ValueError:
+            pass
+
+    def _vw_prev(self):
+        if self._vw_pg > 0: self._vw_goto(self._vw_pg - 1)
+
+    def _vw_next(self):
+        if self._vw_doc and self._vw_pg < self._vw_total - 1:
+            self._vw_goto(self._vw_pg + 1)
+
+    def _vw_zoom_in(self):
+        self._vw_zoom = min(self._vw_zoom * 1.25, 5.0)
+        self._vw_render()
+
+    def _vw_zoom_out(self):
+        self._vw_zoom = max(self._vw_zoom / 1.25, 0.2)
+        self._vw_render()
+
+    def _vw_zoom_apply(self):
+        val = self._vw_zoom_var.get()
+        if val == "전체 폭":   self._vw_fit_width();  return
+        if val == "전체 페이지": self._vw_fit_page();  return
+        try:
+            self._vw_zoom = float(val.rstrip("%")) / 100
+        except ValueError:
+            return
+        self._vw_render()
+
+    def _vw_fit_width(self):
+        if not self._vw_doc: return
+        cw = self._vw_cv.winfo_width() - 20
+        if cw < 1: return
+        page = self._vw_doc[self._vw_pg]
+        pw = page.rect.height if self._vw_rot in (90, 270) else page.rect.width
+        self._vw_zoom = cw / pw
+        self._vw_render()
+
+    def _vw_fit_page(self):
+        if not self._vw_doc: return
+        cw = self._vw_cv.winfo_width()  - 20
+        ch = self._vw_cv.winfo_height() - 20
+        if cw < 1 or ch < 1: return
+        page = self._vw_doc[self._vw_pg]
+        if self._vw_rot in (90, 270):
+            pw, ph = page.rect.height, page.rect.width
+        else:
+            pw, ph = page.rect.width,  page.rect.height
+        self._vw_zoom = min(cw / pw, ch / ph)
+        self._vw_render()
+
+    def _vw_rot_left(self):
+        self._vw_rot = (self._vw_rot - 90) % 360; self._vw_render()
+
+    def _vw_rot_right(self):
+        self._vw_rot = (self._vw_rot + 90) % 360; self._vw_render()
+
+    def _vw_search(self):
+        q = self._vw_sq_var.get().strip()
+        if not q or not self._vw_doc: return
+        self._vw_hits.clear(); self._vw_hit_pos = -1
+        for pg_idx in range(self._vw_total):
+            for r in self._vw_doc[pg_idx].search_for(q):
+                self._vw_hits.append((pg_idx, r))
+        n = len(self._vw_hits)
+        if n == 0:
+            self._vw_hit_lbl.config(text="없음"); self._vw_render(); return
+        self._vw_jump_hit(0)
+
+    def _vw_search_move(self, delta: int):
+        if not self._vw_hits: return
+        self._vw_jump_hit((self._vw_hit_pos + delta) % len(self._vw_hits))
+
+    def _vw_jump_hit(self, pos: int):
+        self._vw_hit_pos = pos
+        pg_idx, _ = self._vw_hits[pos]
+        self._vw_hit_lbl.config(text=f"{pos+1}/{len(self._vw_hits)}")
+        self._vw_pg = pg_idx
+        self._vw_render()
+
+    def _vw_copy_text(self):
+        if not self._vw_doc: return
+        text = self._vw_doc[self._vw_pg].get_text()
+        if not text.strip():
+            messagebox.showinfo("알림",
+                "이 페이지에서 텍스트를 추출할 수 없습니다.\n"
+                "(스캔 이미지 PDF는 텍스트 레이어가 없습니다.)"); return
+        self.clipboard_clear(); self.clipboard_append(text)
+        old = self._vw_status.get()
+        self._vw_status.set(old + "  ✓ 복사됨")
+        self.after(2000, lambda: self._vw_status.set(old))
+
+    def _vw_ctrl_wheel(self, event):
+        if event.delta > 0: self._vw_zoom_in()
+        else:               self._vw_zoom_out()
+
+    def _vw_on_resize(self, event):
+        if not self._vw_doc:
+            try:
+                self._vw_cv.coords(self._vw_welcome_id,
+                                    event.width // 2, event.height // 2)
+            except Exception:
+                pass
+            return
+        if self._vw_resize_id:
+            self.after_cancel(self._vw_resize_id)
+        self._vw_resize_id = self.after(150, self._vw_render)
 
     # ── TAB: 암호화 & 권한 제한 ──────────────────────────────
     def _build_enc_tab(self, parent):
