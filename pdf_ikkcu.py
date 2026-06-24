@@ -1111,12 +1111,87 @@ class PDFIkkcu(tk.Tk):
     def _pg_extract(self):
         if self.thumb.selected_count() == 0:
             messagebox.showwarning("알림", "추출할 페이지를 선택하세요."); return
-        out = filedialog.asksaveasfilename(
-            title="추출 저장 위치", defaultextension=".pdf",
-            filetypes=[("PDF 파일", "*.pdf")])
-        if not out: return
+        fmt = self._ask_extract_format()
+        if not fmt: return
         sources = self.thumb.get_selected_sources()
-        self._thread(self._pg_write, sources, out, self.pg_pb, self.pg_sv, "추출")
+        if fmt == "PDF":
+            out = filedialog.asksaveasfilename(
+                title="추출 저장 위치", defaultextension=".pdf",
+                filetypes=[("PDF 파일", "*.pdf")])
+            if not out: return
+            self._thread(self._pg_write, sources, out, self.pg_pb, self.pg_sv, "추출")
+        else:
+            folder = filedialog.askdirectory(title="이미지 저장 폴더 선택")
+            if not folder: return
+            stem = os.path.splitext(os.path.basename(sources[0][0]))[0]
+            self._thread(self._pg_extract_images, sources, folder, stem, fmt.lower())
+
+    def _ask_extract_format(self) -> "str | None":
+        result: list = [None]
+        dlg = tk.Toplevel(self)
+        dlg.title("추출 형식 선택")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+        dlg.configure(bg=C["bg"])
+
+        tk.Label(dlg, text="추출할 파일 형식을 선택하세요",
+                 font=F_B, bg=C["bg"], fg=C["text"],
+                 pady=16, padx=24).pack()
+
+        desc_f = tk.Frame(dlg, bg=C["bg"])
+        desc_f.pack(padx=24, pady=(0, 6))
+        tk.Label(desc_f,
+                 text="JPG · PNG 선택 시 각 페이지를 이미지 파일로 저장하며\n파일명에 원본 페이지 번호가 추가됩니다.",
+                 font=F_SM, bg=C["bg"], fg=C["sub"], justify="center").pack()
+
+        btn_f = tk.Frame(dlg, bg=C["bg"])
+        btn_f.pack(padx=24, pady=(8, 6))
+        for fmt, bg, bgh, label in [
+            ("PDF", C["primary"], C["pri_h"], "PDF\n단일 파일"),
+            ("JPG", C["success"], C["suc_h"], "JPG\n이미지"),
+            ("PNG", C["success"], C["suc_h"], "PNG\n이미지"),
+        ]:
+            def _pick(f=fmt):
+                result[0] = f; dlg.destroy()
+            hbtn(btn_f, label, _pick, bg, bgh,
+                 padx=20, pady=10).pack(side="left", padx=6)
+
+        cancel_f = tk.Frame(dlg, bg=C["bg"])
+        cancel_f.pack(pady=(0, 14))
+        hbtn(cancel_f, "취소", dlg.destroy,
+             C["border"], "#CBD5E1", C["text"], padx=14, pady=6).pack()
+
+        self.update_idletasks(); dlg.update_idletasks()
+        x = self.winfo_x() + (self.winfo_width()  - dlg.winfo_reqwidth())  // 2
+        y = self.winfo_y() + (self.winfo_height() - dlg.winfo_reqheight()) // 2
+        dlg.geometry(f"+{x}+{y}")
+        dlg.wait_window()
+        return result[0]
+
+    def _pg_extract_images(self, sources: list, folder: str, stem: str, ext: str):
+        self.after(0, self.pg_pb.start, 10)
+        self.after(0, self.pg_sv.set, f"이미지 추출 중 ({ext.upper()})...")
+        try:
+            zoom = 200 / 72
+            mat  = fitz.Matrix(zoom, zoom)
+            for path, orig_idx in sources:
+                doc  = fitz.open(path)
+                page = doc[orig_idx]
+                pix  = page.get_pixmap(matrix=mat, alpha=False)
+                img  = Image.frombytes("RGB", [pix.width, pix.height], pix.samples)
+                page_num = orig_idx + 1
+                fname = f"{stem}_p{page_num:03d}.{ext}"
+                out_path = os.path.join(folder, fname)
+                if ext == "jpg":
+                    img.save(out_path, format="JPEG", quality=92, optimize=True)
+                else:
+                    img.save(out_path, format="PNG", optimize=True)
+                doc.close()
+            self.after(0, self._ok, self.pg_pb, self.pg_sv,
+                       "완료",
+                       f"{len(sources)}페이지 {ext.upper()} 추출 완료!\n\n폴더:\n{folder}")
+        except Exception as e:
+            self.after(0, self._err, self.pg_pb, self.pg_sv, e)
 
     def _pg_save(self):
         if self.thumb.page_count() == 0:
