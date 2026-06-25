@@ -421,6 +421,22 @@ class PDFIkkcu(tk.Tk):
         except Exception:
             pass
 
+    def _icon_label(self, parent, size, bg):
+        try:
+            base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
+            img = Image.open(os.path.join(base, "icon_pdf-ikkcu.png")).convert("RGBA")
+            img = img.resize((size, size), Image.LANCZOS)
+            photo = ImageTk.PhotoImage(img)
+            lbl = tk.Label(parent, image=photo, bg=bg, bd=0)
+            lbl._icon_ref = photo
+            return lbl
+        except Exception:
+            f = tk.Frame(parent, bg=C["danger"], width=size, height=size)
+            f.pack_propagate(False)
+            tk.Label(f, text="PDF", font=(MG[0], max(6, size // 4), "bold"),
+                     bg=C["danger"], fg="white").place(relx=0.5, rely=0.5, anchor="center")
+            return f
+
     # ── Toolbar icons (PIL-generated) ─────────────────────────
     def _build_icons(self):
         try:
@@ -642,11 +658,7 @@ class PDFIkkcu(tk.Tk):
         lf.pack(side="left", padx=14, fill="y")
 
         # PDF icon badge
-        badge = tk.Frame(lf, bg=C["danger"], width=30, height=30)
-        badge.pack(side="left", padx=(0, 10))
-        badge.pack_propagate(False)
-        tk.Label(badge, text="PDF", font=(MG[0], 7, "bold"),
-                 bg=C["danger"], fg="white").place(relx=0.5, rely=0.5, anchor="center")
+        self._icon_label(lf, 30, CH).pack(side="left", padx=(0, 10))
 
         tk.Label(lf, text="PDF.ikkcu Tools", font=F_B,
                  bg=CH, fg="white").pack(side="left")
@@ -930,10 +942,7 @@ class PDFIkkcu(tk.Tk):
         icon_f.pack(fill="x")
         icon_row = tk.Frame(icon_f, bg=C["chrome"])
         icon_row.place(relx=0.5, rely=0.5, anchor="center")
-        badge2 = tk.Frame(icon_row, bg=C["danger"], width=36, height=36)
-        badge2.pack(side="left", padx=(0, 10)); badge2.pack_propagate(False)
-        tk.Label(badge2, text="PDF", font=(MG[0], 8, "bold"),
-                 bg=C["danger"], fg="white").place(relx=0.5, rely=0.5, anchor="center")
+        self._icon_label(icon_row, 36, C["chrome"]).pack(side="left", padx=(0, 10))
         tk.Label(icon_row, text="PDF.ikkcu Tools", font=(MG[0], 18, "bold"),
                  bg=C["chrome"], fg="white").pack(side="left")
 
@@ -4161,11 +4170,7 @@ class PDFIkkcu(tk.Tk):
         icon_f.pack(fill="x")
         icon_row = tk.Frame(icon_f, bg=C["chrome"])
         icon_row.place(relx=0.5, rely=0.5, anchor="center")
-        badge2 = tk.Frame(icon_row, bg=C["danger"], width=36, height=36)
-        badge2.pack(side="left", padx=(0, 10))
-        badge2.pack_propagate(False)
-        tk.Label(badge2, text="PDF", font=(MG[0], 8, "bold"),
-                 bg=C["danger"], fg="white").place(relx=0.5, rely=0.5, anchor="center")
+        self._icon_label(icon_row, 36, C["chrome"]).pack(side="left", padx=(0, 10))
         tk.Label(icon_row, text="PDF.ikkcu Tools", font=(MG[0], 18, "bold"),
                  bg=C["chrome"], fg="white").pack(side="left")
 
