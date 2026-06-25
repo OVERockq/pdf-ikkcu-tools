@@ -102,3 +102,11 @@ Generated artifacts are intentionally ignored:
 - `__pycache__/`
 
 Local agent memory under `ai-memory/` is also ignored.
+
+## macOS Security
+
+macOS may block the app on first launch. Go to **System Settings → Privacy & Security** and click **Open Anyway**, or remove the quarantine attribute manually:
+
+```sh
+sudo xattr -r -d com.apple.quarantine /Applications/PDF.ikkcu\ Tools.app
+```
