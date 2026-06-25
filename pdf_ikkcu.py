@@ -407,9 +407,15 @@ class PDFIkkcu(tk.Tk):
     # ── icon ──────────────────────────────────────────────────
     def _set_icon(self):
         try:
+            from PIL import ImageDraw
             base = getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__)))
             path = os.path.join(base, "icon_pdf-ikkcu.png")
             img = Image.open(path).convert("RGBA").resize((256, 256), Image.LANCZOS)
+            mask = Image.new("L", img.size, 0)
+            d = ImageDraw.Draw(mask)
+            r = round(img.width * 0.20)
+            d.rounded_rectangle([0, 0, img.width - 1, img.height - 1], radius=r, fill=255)
+            img.putalpha(mask)
             self._icon_img = ImageTk.PhotoImage(img)
             self.iconphoto(True, self._icon_img)
         except Exception:
