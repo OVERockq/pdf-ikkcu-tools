@@ -10,6 +10,8 @@ pyinstaller ^
   --onefile ^
   --windowed ^
   --name "PDF.ikkcu_Tools" ^
+  --icon "build\icon_pdf-ikkcu.ico" ^
+  --add-data "icon_pdf-ikkcu.png;." ^
   --hidden-import pypdf ^
   --hidden-import fitz ^
   --hidden-import pymupdf ^

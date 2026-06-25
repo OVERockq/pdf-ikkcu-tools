@@ -1,0 +1,35 @@
+FROM ubuntu:22.04
+
+ENV DEBIAN_FRONTEND=noninteractive \
+    WINEDEBUG=-all \
+    WINEARCH=win64 \
+    WINEPREFIX=/root/.wine
+
+# Wine + Xvfb
+RUN dpkg --add-architecture i386 \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends \
+        wget gnupg2 ca-certificates xvfb \
+ && mkdir -p /etc/apt/keyrings \
+ && wget -qO /etc/apt/keyrings/winehq.key https://dl.winehq.org/wine-builds/winehq.key \
+ && echo "deb [arch=amd64,i386 signed-by=/etc/apt/keyrings/winehq.key] https://dl.winehq.org/wine-builds/ubuntu/ jammy main" \
+        > /etc/apt/sources.list.d/winehq.list \
+ && apt-get update \
+ && apt-get install -y --install-recommends winehq-stable \
+ && rm -rf /var/lib/apt/lists/*
+
+# Wine 초기화
+RUN xvfb-run wineboot --init && sleep 5
+
+# Python 3.12 for Windows (64-bit)
+RUN wget -q "https://www.python.org/ftp/python/3.12.9/python-3.12.9-amd64.exe" -O /tmp/py.exe \
+ && xvfb-run wine /tmp/py.exe /quiet InstallAllUsers=1 PrependPath=1 \
+ && sleep 15 \
+ && rm /tmp/py.exe
+
+# Python 패키지 설치
+COPY requirements.txt /tmp/requirements.txt
+RUN xvfb-run wine python -m pip install --upgrade pip \
+ && xvfb-run wine python -m pip install -r /tmp/requirements.txt
+
+WORKDIR /src
