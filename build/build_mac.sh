@@ -5,6 +5,7 @@ cd "$(dirname "$0")/.."
 
 APP_NAME="PDF.ikkcu Tools"
 DMG_BASE="PDF.ikkcu_Tools_mac"
+ICON="build/icon_pdf-ikkcu.icns"
 mkdir -p .build-cache/pip .build-cache/pyinstaller
 export PIP_CACHE_DIR="$PWD/.build-cache/pip"
 export PYINSTALLER_CONFIG_DIR="$PWD/.build-cache/pyinstaller"
@@ -32,6 +33,7 @@ build_arch() {
     --noconfirm \
     --windowed \
     --name "$APP_NAME" \
+    --icon "$ICON" \
     --target-architecture "$arch_name" \
     --distpath "$dist_dir" \
     --workpath "$work_dir" \
