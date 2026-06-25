@@ -4,12 +4,31 @@ PDF ikkcu is a desktop PDF utility built with Python and Tkinter.
 
 ## Features
 
-- Encrypt PDFs with AES-256, AES-128, or RC4-128.
-- Edit page order with thumbnail previews.
-- Delete, append, and extract pages.
-- Merge multiple PDFs.
-- Split PDFs by page, range, or fixed page count.
-- Compress PDF content streams and optionally remove metadata.
+### PDF Viewer
+- Full PDF reader with single page, continuous scroll, and dual-page (spread) view modes
+- Thumbnail side panel for quick page navigation
+- Table of contents panel
+- Zoom in/out with keyboard shortcuts and toolbar buttons
+- AI file (.ai) viewer support
+
+### PDF Editing
+- Edit page order with thumbnail previews
+- Delete, append, and extract pages (PDF / JPG / PNG output)
+- Merge multiple PDFs
+- Split PDFs by page, range, or fixed page count
+
+### Security & Stamps
+- Encrypt PDFs with AES-256, AES-128, or RC4-128
+- Apply custom stamps to pages
+
+### Utilities
+- Compress PDF content streams and optionally remove metadata
+- Edit document properties (title, author, subject, keywords)
+- Preferences dialog (default view mode, shortcuts, default viewer)
+
+### UI
+- Native menubar (File / Tools / View / Help)
+- PIL-generated toolbar icons
 
 ## Requirements
 
@@ -49,8 +68,9 @@ Output:
 
 - `dist/macos-arm64/PDF ikkcu.app`
 - `dist/macos-x86_64/PDF ikkcu.app`
-- `PDF_ikkcu_mac_arm64.dmg`
-- `PDF_ikkcu_mac_x86_64.dmg`
+- `PDF.ikkcu_v2.0_mac_arm64.dmg`
+- `PDF.ikkcu_Tools_mac_x86_64.dmg`
+- `PDF.ikkcu_Tools_mac_universal.dmg`
 
 Linux amd64:
 
