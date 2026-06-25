@@ -44,6 +44,7 @@ build_arch() {
     --hidden-import PIL \
     --hidden-import PIL.Image \
     --hidden-import PIL.ImageTk \
+    --add-data "icon_pdf-ikkcu.png:." \
     pdf_ikkcu.py
 
   echo "[${arch_name}] Creating DMG..."
