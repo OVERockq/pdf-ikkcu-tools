@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 PKG_NAME="pdf-ikkcu-tools"
 APP_NAME="PDF.ikkcu Tools"
-VERSION="1.0.0"
+VERSION="2.0.0"
 ARCH="amd64"
 DEB_OUT="${PKG_NAME}_${VERSION}_${ARCH}.deb"
 
@@ -14,7 +14,6 @@ echo "[linux] Building + packaging via Docker (Ubuntu 22.04 / amd64)..."
 docker run --rm \
   --platform linux/amd64 \
   -v "$PWD":/work \
-  -w /work \
   ubuntu:22.04 \
   bash -c "
     set -euo pipefail
@@ -26,7 +25,10 @@ docker run --rm \
       libgl1 libglib2.0-0 libsm6 libxrender1 libxext6 \
       binutils dpkg-dev file > /dev/null 2>&1
 
-    pip3 install --quiet -r build/requirements.txt
+    pip3 install --quiet -r /work/build/requirements.txt
+
+    cd /tmp
+    cp /work/pdf_ikkcu.py .
 
     pyinstaller \
       --onefile \
@@ -39,15 +41,14 @@ docker run --rm \
       --hidden-import PIL.ImageTk \
       pdf_ikkcu.py
 
-    PKG_DIR=\"dist/${PKG_NAME}_${VERSION}_${ARCH}\"
+    PKG_DIR=\"/tmp/pkg/${PKG_NAME}_${VERSION}_${ARCH}\"
     rm -rf \"\$PKG_DIR\"
-    mkdir -p \"\${PKG_DIR}/usr/local/bin\"
-    mkdir -p \"\${PKG_DIR}/usr/share/applications\"
-    mkdir -p \"\${PKG_DIR}/usr/share/doc/${PKG_NAME}\"
-    mkdir -p \"\${PKG_DIR}/DEBIAN\"
+    install -d -m 755 \"\${PKG_DIR}/usr/local/bin\"
+    install -d -m 755 \"\${PKG_DIR}/usr/share/applications\"
+    install -d -m 755 \"\${PKG_DIR}/usr/share/doc/${PKG_NAME}\"
+    install -d -m 755 \"\${PKG_DIR}/DEBIAN\"
 
-    cp dist/pdf_ikkcu_tools \"\${PKG_DIR}/usr/local/bin/\"
-    chmod 755 \"\${PKG_DIR}/usr/local/bin/pdf_ikkcu_tools\"
+    install -m 755 /tmp/dist/pdf_ikkcu_tools \"\${PKG_DIR}/usr/local/bin/\"
 
     cat > \"\${PKG_DIR}/usr/share/applications/pdf-ikkcu-tools.desktop\" <<'DESKTOP'
 [Desktop Entry]
@@ -62,7 +63,7 @@ Keywords=PDF;encrypt;merge;split;compress;
 DESKTOP
 
     cat > \"\${PKG_DIR}/usr/share/doc/${PKG_NAME}/copyright\" <<'CR'
-${APP_NAME} — Freeware PDF Tool
+${APP_NAME} -- Freeware PDF Tool
 Copyright 2025 ikkcu.com
 This software is provided as freeware. Free to use, no warranty.
 CR
@@ -77,12 +78,13 @@ Architecture: ${ARCH}
 Installed-Size: \${INSTALLED_SIZE}
 Depends: libgl1, python3-tk
 Maintainer: ikkcu <noreply@ikkcu.com>
-Description: ${APP_NAME} — Freeware PDF Tool
+Description: ${APP_NAME} -- Freeware PDF Tool
  Free GUI tool for PDF encryption, page editing with preview,
  merging, splitting, and compression.
 CTRL
 
-    dpkg-deb --build --root-owner-group \"\$PKG_DIR\" \"${DEB_OUT}\"
+    dpkg-deb --build --root-owner-group \"\$PKG_DIR\" \"/tmp/${DEB_OUT}\"
+    cp \"/tmp/${DEB_OUT}\" /work/
     echo '[linux] .deb built successfully.'
   "
 
