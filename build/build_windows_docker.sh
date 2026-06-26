@@ -7,12 +7,13 @@ IMAGE="pdf-ikkcu-win-builder"
 OUT_DIR="dist/windows"
 
 echo "[windows] Docker 이미지 빌드 (처음 실행 시 10~20분 소요)..."
-docker build -f build/Dockerfile.windows -t "$IMAGE" .
+docker build --platform linux/amd64 -f build/Dockerfile.windows -t "$IMAGE" .
 
 mkdir -p "$OUT_DIR"
 
 echo "[windows] PyInstaller 실행 중..."
 docker run --rm \
+    --platform linux/amd64 \
     -v "$PWD:/src" \
     -w /src \
     "$IMAGE" \

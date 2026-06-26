@@ -25,7 +25,10 @@ build_arch() {
 
   echo "[${arch_name}] Installing dependencies..."
   arch "$arch_flag" "$venv/bin/python" -m pip install --upgrade pip
-  arch "$arch_flag" "$venv/bin/python" -m pip install -r build/requirements.txt
+  arch "$arch_flag" env \
+    _PYTHON_HOST_PLATFORM="macosx-11.0-${arch_name}" \
+    ARCHFLAGS="-arch ${arch_name}" \
+    "$venv/bin/python" -m pip install --no-cache-dir -r build/requirements.txt
 
   echo "[${arch_name}] Building .app bundle..."
   arch "$arch_flag" "$venv/bin/python" -m PyInstaller \

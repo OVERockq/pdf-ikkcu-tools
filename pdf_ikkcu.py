@@ -3144,10 +3144,11 @@ class PDFIkkcu(tk.Tk):
                      any(c in "!@#$%^&*()" for c in pw)])
         cols  = ["#EF4444","#F97316","#EAB308","#22C55E"]
         labls = ["취약","보통","강함","매우 강함"]
+        si = max(0, score - 1)
         for i, b in enumerate(self._sbars):
-            b.config(bg=cols[score-1] if pw and i < score else C["border"])
-        self._slbl.config(text=labls[score-1] if pw else "",
-                          fg=cols[score-1] if pw else C["sub"])
+            b.config(bg=cols[si] if pw and i < score else C["border"])
+        self._slbl.config(text=labls[si] if pw else "",
+                          fg=cols[si] if pw else C["sub"])
 
     def _pw_match(self):
         p1, p2 = self.pw_var.get(), self.pw2_var.get()
