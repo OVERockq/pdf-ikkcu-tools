@@ -961,7 +961,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com", APP_URL),
-            ("버전",     "2.0.0",     None),
+            ("버전",     "2.1.0",     None),
             ("라이선스", "Freeware",  None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=2)
@@ -4218,7 +4218,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com",  APP_URL),
-            ("버전",     "2.0.0",      None),
+            ("버전",     "2.1.0",      None),
             ("라이선스", "Freeware",   None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=3)

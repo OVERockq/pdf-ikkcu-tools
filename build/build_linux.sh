@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 
 PKG_NAME="pdf-ikkcu-tools"
 APP_NAME="PDF.ikkcu Tools"
-VERSION="2.0.0"
+VERSION="2.1.0"
 ARCH="amd64"
 DEB_OUT="${PKG_NAME}_${VERSION}_${ARCH}.deb"
 
