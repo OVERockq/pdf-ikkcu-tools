@@ -1,4 +1,4 @@
-"""PDF.ikkcu Tools — Freeware PDF Tool v2.1"""
+"""PDF.ikkcu Tools — Freeware PDF Tool v2.2.1"""
 from __future__ import annotations
 import re, os, sys, threading, webbrowser, tkinter as tk
 import tkinter.font as tkfont
@@ -662,7 +662,7 @@ class PDFIkkcu(tk.Tk):
 
         tk.Label(lf, text="PDF.ikkcu Tools", font=F_B,
                  bg=CH, fg="white").pack(side="left")
-        tk.Label(lf, text="v2.1", font=F_SM,
+        tk.Label(lf, text="v2.2.1", font=F_SM,
                  bg=CH, fg=CH_S).pack(side="left", padx=(6, 0))
 
         # Right controls
@@ -961,7 +961,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com", APP_URL),
-            ("버전",     "2.1.0",     None),
+            ("버전",     "2.2.1",     None),
             ("라이선스", "Freeware",  None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=2)
@@ -4219,7 +4219,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com",  APP_URL),
-            ("버전",     "2.1.0",      None),
+            ("버전",     "2.2.1",      None),
             ("라이선스", "Freeware",   None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=3)
