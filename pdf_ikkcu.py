@@ -1,4 +1,4 @@
-"""PDF.ikkcu Tools — Freeware PDF Tool v2.2.2"""
+"""PDF.ikkcu Tools — Freeware PDF Tool v2.2.3"""
 from __future__ import annotations
 import re, os, sys, threading, webbrowser, tkinter as tk
 import tkinter.font as tkfont
@@ -23,6 +23,15 @@ _pip("pypdf", "pymupdf", "Pillow")
 from pypdf import PdfReader, PdfWriter   # type: ignore
 import fitz                               # type: ignore  (pymupdf)
 from PIL import Image, ImageTk            # type: ignore
+
+# ── optional drag-and-drop (tkinterdnd2) ─────────────────────
+try:
+    from tkinterdnd2 import TkinterDnD as _TkDnD, DND_FILES as _DND_FILES
+    _TK_BASE: type = _TkDnD.Tk
+    _HAS_DND = True
+except ImportError:
+    _TK_BASE = tk.Tk  # type: ignore
+    _HAS_DND = False
 
 # ── tokens ───────────────────────────────────────────────────
 # ▼ Ko-fi 링크
@@ -367,7 +376,7 @@ class FlatNotebook(tk.Frame):
 
 
 # ── Main App ─────────────────────────────────────────────────
-class PDFIkkcu(tk.Tk):
+class PDFIkkcu(_TK_BASE):  # type: ignore
     def __init__(self):
         super().__init__()
         apply_display_scaling(self)
@@ -389,6 +398,36 @@ class PDFIkkcu(tk.Tk):
         x = (self.winfo_screenwidth()  - w) // 2
         y = (self.winfo_screenheight() - h) // 2
         self.geometry(f"{w}x{h}+{x}+{y}")
+
+        # macOS: handle files opened via Finder / Open With / drag-onto-icon
+        if sys.platform == "darwin":
+            self.createcommand("::tk::mac::OpenDocument", self._mac_open_document)
+        # open file passed as CLI argument (e.g. `app file.pdf` or PyInstaller argv)
+        self.after(150, self._open_startup_file)
+
+    # ── file open via OS (drag-onto-icon / Open With / default app) ──
+    def _mac_open_document(self, *paths):
+        """macOS Apple Event: odoc — called when a file is opened while app is running."""
+        for p in paths:
+            if os.path.isfile(p) and os.path.splitext(p)[1].lower() in ('.pdf', '.ai'):
+                self._vw_load(p)
+                self.lift(); self.focus_force()
+                return
+
+    def _open_startup_file(self):
+        """Open PDF passed as argv[1] at launch (drag-onto-icon when app was not running)."""
+        for arg in sys.argv[1:]:
+            if os.path.isfile(arg) and os.path.splitext(arg)[1].lower() in ('.pdf', '.ai'):
+                self._vw_load(arg)
+                return
+
+    def _vw_on_drop(self, event):
+        """Handle file drop onto viewer canvas (tkinterdnd2)."""
+        paths = self.tk.splitlist(event.data)
+        for p in paths:
+            if os.path.isfile(p) and os.path.splitext(p)[1].lower() in ('.pdf', '.ai'):
+                self._vw_load(p)
+                return
 
     def _on_close(self):
         if self._closing:
@@ -662,7 +701,7 @@ class PDFIkkcu(tk.Tk):
 
         tk.Label(lf, text="PDF.ikkcu Tools", font=F_B,
                  bg=CH, fg="white").pack(side="left")
-        tk.Label(lf, text="v2.2.2", font=F_SM,
+        tk.Label(lf, text="v2.2.3", font=F_SM,
                  bg=CH, fg=CH_S).pack(side="left", padx=(6, 0))
 
         # Right controls
@@ -961,7 +1000,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com", APP_URL),
-            ("버전",     "2.2.2",     None),
+            ("버전",     "2.2.3",     None),
             ("라이선스", "Freeware",  None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=2)
@@ -1322,9 +1361,17 @@ class PDFIkkcu(tk.Tk):
         self._vw_cv.bind("<Right>", lambda e: self._vw_next())
         self._vw_cv.bind("<Configure>", self._vw_on_resize)
 
+        # Register as drag-and-drop target when tkinterdnd2 is available
+        if _HAS_DND:
+            try:
+                self._vw_cv.drop_target_register(_DND_FILES)
+                self._vw_cv.dnd_bind("<<Drop>>", self._vw_on_drop)
+            except Exception:
+                pass
+
         self._vw_welcome_id = self._vw_cv.create_text(
             400, 300,
-            text="열기 버튼으로 PDF를 여세요.",
+            text="PDF 파일을 이곳에 드래그하거나\n열기 버튼을 누르세요.",
             font=F_B, fill="#AAAAAA", justify="center")
 
         # Acrobat-style status bar at bottom
@@ -4220,7 +4267,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com",  APP_URL),
-            ("버전",     "2.2.2",      None),
+            ("버전",     "2.2.3",      None),
             ("라이선스", "Freeware",   None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=3)

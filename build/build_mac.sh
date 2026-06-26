@@ -37,6 +37,7 @@ build_arch() {
     --windowed \
     --name "$APP_NAME" \
     --icon "$ICON" \
+    --osx-bundle-identifier "com.ikkcu.pdf-tools" \
     --target-architecture "$arch_name" \
     --distpath "$dist_dir" \
     --workpath "$work_dir" \
@@ -47,8 +48,40 @@ build_arch() {
     --hidden-import PIL \
     --hidden-import PIL.Image \
     --hidden-import PIL.ImageTk \
+    --hidden-import tkinterdnd2 \
+    --collect-all tkinterdnd2 \
     --add-data "$PWD/icon_pdf-ikkcu.png:." \
     pdf_ikkcu.py
+
+  echo "[${arch_name}] Patching Info.plist for file associations..."
+  python3 - <<PYEOF
+import plistlib, pathlib
+p = pathlib.Path("${dist_dir}/${APP_NAME}.app/Contents/Info.plist")
+pl = plistlib.loads(p.read_bytes())
+pl["CFBundleDocumentTypes"] = [
+    {
+        "CFBundleTypeExtensions": ["pdf", "ai"],
+        "CFBundleTypeName": "PDF Document",
+        "CFBundleTypeRole": "Viewer",
+        "LSHandlerRank": "Alternate",
+        "LSItemContentTypes": ["com.adobe.pdf"],
+        "CFBundleTypeIconFile": "icon_pdf-ikkcu.png",
+    }
+]
+pl["UTImportedTypeDeclarations"] = [
+    {
+        "UTTypeConformsTo": ["public.data", "public.composite-content"],
+        "UTTypeDescription": "Portable Document Format",
+        "UTTypeIdentifier": "com.adobe.pdf",
+        "UTTypeTagSpecification": {
+            "public.filename-extension": ["pdf"],
+            "public.mime-type": "application/pdf",
+        },
+    }
+]
+p.write_bytes(plistlib.dumps(pl))
+print("  Info.plist patched.")
+PYEOF
 
   echo "[${arch_name}] Creating DMG..."
   rm -rf "$dmg_stage"
