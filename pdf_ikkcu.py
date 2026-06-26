@@ -1739,11 +1739,13 @@ class PDFIkkcu(tk.Tk):
             self._vw_tools_shown = True
             self._vw_tool_btn.config(text="도구 ◁")
 
-    def _dlg_center(self, dlg: tk.Toplevel, w: int, h: int):
+    def _dlg_center(self, dlg: tk.Toplevel, w: int, h: int = 0):
         self.update_idletasks()
+        dlg.update_idletasks()
+        actual_h = h if h > 0 else dlg.winfo_reqheight()
         x = self.winfo_x() + max(0, (self.winfo_width()  - w) // 2)
-        y = self.winfo_y() + max(0, (self.winfo_height() - h) // 2)
-        dlg.geometry(f"{w}x{h}+{x}+{y}")
+        y = self.winfo_y() + max(0, (self.winfo_height() - actual_h) // 2)
+        dlg.geometry(f"{w}x{actual_h}+{x}+{y}")
 
     # ── 암호화 다이얼로그 ──────────────────────────────────────
     def _vw_dlg_encrypt(self):
@@ -1752,12 +1754,20 @@ class PDFIkkcu(tk.Tk):
         base, ext = os.path.splitext(src)
 
         dlg = tk.Toplevel(self)
-        dlg.title("암호화"); dlg.resizable(False, False); dlg.grab_set()
+        dlg.title("암호화"); dlg.resizable(True, True); dlg.grab_set()
         dlg.configure(bg=C["bg"])
-        self._dlg_center(dlg, 480, 400)
+        dlg.minsize(400, 360)
+
+        # Footer — pack BEFORE content so it's always visible
+        bot = tk.Frame(dlg, bg=C["bg"])
+        bot.pack(side="bottom", fill="x", padx=16, pady=(0,12))
+        sv = tk.StringVar(value="")
+        pb = mkpb(bot); pb.pack(fill="x", pady=(0,3))
+        tk.Label(bot, textvariable=sv, font=F_SM, bg=C["bg"],
+                 fg=C["sub"], anchor="w").pack(fill="x")
 
         f = tk.Frame(dlg, bg=C["bg"])
-        f.pack(fill="both", expand=True, padx=16, pady=12)
+        f.pack(fill="both", expand=True, padx=16, pady=(12,4))
 
         ic = SectionCard(f, "파일"); ic.pack(fill="x", pady=(0, 8))
         tk.Label(ic.body, text=os.path.basename(src), font=F_SM,
@@ -1793,11 +1803,6 @@ class PDFIkkcu(tk.Tk):
         hbtn(oc.body, "찾기", lambda: self._save_dialog(ov),
              C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
 
-        sv = tk.StringVar(value="")
-        pb = mkpb(f); pb.pack(fill="x", pady=(0,3))
-        tk.Label(f, textvariable=sv, font=F_SM, bg=C["bg"],
-                 fg=C["sub"], anchor="w").pack(fill="x")
-
         def _run():
             p1, p2, out = pv.get(), pv2.get(), ov.get().strip()
             if not p1: messagebox.showerror("오류", "비밀번호를 입력하세요.", parent=dlg); return
@@ -1818,8 +1823,9 @@ class PDFIkkcu(tk.Tk):
                     self.after(0, messagebox.showerror, "오류", str(e))
             threading.Thread(target=_wk, daemon=True).start()
 
-        hbtn(f, "  암호화하여 저장  ", _run, C["primary"], C["pri_h"],
+        hbtn(bot, "  암호화하여 저장  ", _run, C["primary"], C["pri_h"],
              pady=10).pack(fill="x", pady=(4,0))
+        self._dlg_center(dlg, 480)
 
     # ── 페이지 편집 다이얼로그 ─────────────────────────────────
     def _vw_dlg_page_edit(self):
@@ -1838,6 +1844,24 @@ class PDFIkkcu(tk.Tk):
         pb = mkpb(top); pb.pack(fill="x", pady=(0,3))
         tk.Label(top, textvariable=sv, font=F_SM, bg=C["bg"],
                  fg=C["sub"], anchor="w").pack(fill="x")
+
+        # Save bar — pack BEFORE mid so expand=True in mid doesn't consume it
+        bot = tk.Frame(dlg, bg=C["bg"]); bot.pack(side="bottom", fill="x", padx=12, pady=(4,10))
+        bot.columnconfigure(0, weight=1)
+        ov = tk.StringVar(value=base + "_edited" + ext)
+        centry(bot, ov).grid(row=0, column=0, sticky="ew", padx=(0,8))
+        hbtn(bot, "찾기", lambda: self._save_dialog(ov),
+             C["primary"], C["pri_h"], padx=8, pady=6).grid(row=0, column=1)
+
+        def _save():
+            if not thumb_ref[0] or thumb_ref[0].page_count() == 0:
+                messagebox.showerror("오류", "페이지가 없습니다.", parent=dlg); return
+            out = ov.get().strip()
+            if not out: messagebox.showerror("오류", "저장 위치를 지정하세요.", parent=dlg); return
+            self._thread(self._pg_write, thumb_ref[0].get_page_sources(), out, pb, sv, "저장")
+
+        hbtn(bot, "  편집 결과 저장  ", _save, C["primary"], C["pri_h"],
+             pady=10).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6,0))
 
         mid = tk.Frame(dlg, bg=C["bg"]); mid.pack(fill="both", expand=True, padx=12)
 
@@ -1896,24 +1920,6 @@ class PDFIkkcu(tk.Tk):
                       font=F_SM, bg=C["card"], fg=C["muted"])
         ll.place(relx=0.5, rely=0.5, anchor="center")
 
-        # Save bar
-        bot = tk.Frame(dlg, bg=C["bg"]); bot.pack(fill="x", padx=12, pady=(4,10))
-        bot.columnconfigure(0, weight=1)
-        ov = tk.StringVar(value=base + "_edited" + ext)
-        centry(bot, ov).grid(row=0, column=0, sticky="ew", padx=(0,8))
-        hbtn(bot, "찾기", lambda: self._save_dialog(ov),
-             C["primary"], C["pri_h"], padx=8, pady=6).grid(row=0, column=1)
-
-        def _save():
-            if not thumb_ref[0] or thumb_ref[0].page_count() == 0:
-                messagebox.showerror("오류", "페이지가 없습니다.", parent=dlg); return
-            out = ov.get().strip()
-            if not out: messagebox.showerror("오류", "저장 위치를 지정하세요.", parent=dlg); return
-            self._thread(self._pg_write, thumb_ref[0].get_page_sources(), out, pb, sv, "저장")
-
-        hbtn(bot, "  편집 결과 저장  ", _save, C["primary"], C["pri_h"],
-             pady=10).grid(row=1, column=0, columnspan=2, sticky="ew", pady=(6,0))
-
         pb.start(10)
         thumb.load(src, on_ready=lambda n: (
             ll.lower(), pb.stop(), sv.set(f"총 {n}페이지 로드됨."),
@@ -1925,15 +1931,33 @@ class PDFIkkcu(tk.Tk):
         src = self._vw_path
 
         dlg = tk.Toplevel(self)
-        dlg.title("PDF 병합"); dlg.resizable(True, False); dlg.grab_set()
-        dlg.configure(bg=C["bg"]); self._dlg_center(dlg, 580, 460)
+        dlg.title("PDF 병합"); dlg.resizable(True, True); dlg.grab_set()
+        dlg.configure(bg=C["bg"])
+        dlg.minsize(480, 400)
 
-        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=12)
         merge_files = [src]
+
+        # Footer — pack BEFORE content so lc's expand=True doesn't consume it
+        bot = tk.Frame(dlg, bg=C["bg"])
+        bot.pack(side="bottom", fill="x", padx=16, pady=(0,12))
+
+        oc = SectionCard(bot, "저장 위치"); oc.pack(fill="x", pady=(0,8))
+        oc.body.columnconfigure(0, weight=1)
+        ov = tk.StringVar(value=os.path.join(os.path.dirname(src), "merged.pdf"))
+        centry(oc.body, ov).grid(row=0, column=0, sticky="ew", padx=(0,8))
+        hbtn(oc.body, "찾기", lambda: self._save_dialog(ov),
+             C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
+
+        sv = tk.StringVar(value=f"{len(merge_files)}개 파일")
+        pb = mkpb(bot); pb.pack(fill="x", pady=(0,3))
+        tk.Label(bot, textvariable=sv, font=F_SM, bg=C["bg"],
+                 fg=C["sub"], anchor="w").pack(fill="x")
+
+        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=(12,4))
 
         lc = tk.Frame(f, bg=C["card"],
                       highlightbackground=C["border"], highlightthickness=1)
-        lc.pack(fill="both", expand=True, pady=(0,8))
+        lc.pack(fill="both", expand=True)
         lh = tk.Frame(lc, bg=C["card_hdr"]); lh.pack(fill="x")
         tk.Label(lh, text="병합할 PDF 목록", font=F_B, bg=C["card_hdr"],
                  fg=C["text"], padx=12, pady=7).pack(side="left")
@@ -1993,18 +2017,6 @@ class PDFIkkcu(tk.Tk):
         mg_sb.pack(side="right", fill="y")
         lb.insert("end", f"  {os.path.basename(src)}  ← 현재 파일")
 
-        oc = SectionCard(f, "저장 위치"); oc.pack(fill="x", pady=(0,8))
-        oc.body.columnconfigure(0, weight=1)
-        ov = tk.StringVar(value=os.path.join(os.path.dirname(src), "merged.pdf"))
-        centry(oc.body, ov).grid(row=0, column=0, sticky="ew", padx=(0,8))
-        hbtn(oc.body, "찾기", lambda: self._save_dialog(ov),
-             C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
-
-        sv = tk.StringVar(value=f"{len(merge_files)}개 파일")
-        pb = mkpb(f); pb.pack(fill="x", pady=(0,3))
-        tk.Label(f, textvariable=sv, font=F_SM, bg=C["bg"],
-                 fg=C["sub"], anchor="w").pack(fill="x")
-
         def _run():
             if len(merge_files) < 2:
                 messagebox.showerror("오류", "PDF를 2개 이상 추가하세요.", parent=dlg); return
@@ -2026,8 +2038,9 @@ class PDFIkkcu(tk.Tk):
                     self.after(0, messagebox.showerror, "오류", str(e))
             threading.Thread(target=_wk, daemon=True).start()
 
-        hbtn(f, "  PDF 병합하여 저장  ", _run, C["primary"], C["pri_h"],
+        hbtn(bot, "  PDF 병합하여 저장  ", _run, C["primary"], C["pri_h"],
              pady=10).pack(fill="x", pady=(4,0))
+        self._dlg_center(dlg, 580)
 
     # ── 나누기 다이얼로그 ─────────────────────────────────────
     def _vw_dlg_split(self):
@@ -2035,10 +2048,19 @@ class PDFIkkcu(tk.Tk):
         src = self._vw_path
 
         dlg = tk.Toplevel(self)
-        dlg.title("PDF 나누기"); dlg.resizable(False, False); dlg.grab_set()
-        dlg.configure(bg=C["bg"]); self._dlg_center(dlg, 460, 350)
+        dlg.title("PDF 나누기"); dlg.resizable(True, True); dlg.grab_set()
+        dlg.configure(bg=C["bg"])
+        dlg.minsize(380, 340)
 
-        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=12)
+        # Footer — pack BEFORE content
+        bot = tk.Frame(dlg, bg=C["bg"])
+        bot.pack(side="bottom", fill="x", padx=16, pady=(0,12))
+        sv = tk.StringVar(value="")
+        pb = mkpb(bot); pb.pack(fill="x", pady=(0,3))
+        tk.Label(bot, textvariable=sv, font=F_SM, bg=C["bg"],
+                 fg=C["sub"], anchor="w").pack(fill="x")
+
+        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=(12,4))
 
         ic = SectionCard(f, "파일"); ic.pack(fill="x", pady=(0,8))
         tk.Label(ic.body, text=f"{os.path.basename(src)}  ({self._vw_total}페이지)",
@@ -2079,11 +2101,6 @@ class PDFIkkcu(tk.Tk):
              lambda: dv.set(filedialog.askdirectory(parent=dlg, title="저장 폴더") or dv.get()),
              C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
 
-        sv = tk.StringVar(value="")
-        pb = mkpb(f); pb.pack(fill="x", pady=(0,3))
-        tk.Label(f, textvariable=sv, font=F_SM, bg=C["bg"],
-                 fg=C["sub"], anchor="w").pack(fill="x")
-
         def _run():
             d = dv.get().strip()
             if not d or not os.path.isdir(d):
@@ -2122,8 +2139,9 @@ class PDFIkkcu(tk.Tk):
                     self.after(0, messagebox.showerror, "오류", str(e2))
             threading.Thread(target=_wk, daemon=True).start()
 
-        hbtn(f, "  PDF 나누기  ", _run, C["primary"], C["pri_h"],
+        hbtn(bot, "  PDF 나누기  ", _run, C["primary"], C["pri_h"],
              pady=10).pack(fill="x", pady=(4,0))
+        self._dlg_center(dlg, 460)
 
     # ── 압축 다이얼로그 ───────────────────────────────────────
     def _vw_dlg_compress(self):
@@ -2135,10 +2153,19 @@ class PDFIkkcu(tk.Tk):
         except Exception: info = f"{os.path.basename(src)}  ({kb:.1f} KB)"
 
         dlg = tk.Toplevel(self)
-        dlg.title("PDF 압축"); dlg.resizable(False, False); dlg.grab_set()
-        dlg.configure(bg=C["bg"]); self._dlg_center(dlg, 480, 400)
+        dlg.title("PDF 압축"); dlg.resizable(True, True); dlg.grab_set()
+        dlg.configure(bg=C["bg"])
+        dlg.minsize(400, 380)
 
-        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=12)
+        # Footer — pack BEFORE content
+        bot = tk.Frame(dlg, bg=C["bg"])
+        bot.pack(side="bottom", fill="x", padx=16, pady=(0,12))
+        sv2 = tk.StringVar(value="")
+        pb2 = mkpb(bot); pb2.pack(fill="x", pady=(0,3))
+        tk.Label(bot, textvariable=sv2, font=F_SM, bg=C["bg"],
+                 fg=C["sub"], anchor="w").pack(fill="x")
+
+        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=(12,4))
 
         ic = SectionCard(f, "파일"); ic.pack(fill="x", pady=(0,8))
         tk.Label(ic.body, text=info, font=F_SM, bg=C["card"], fg=C["text"]).pack(anchor="w")
@@ -2184,11 +2211,6 @@ class PDFIkkcu(tk.Tk):
         centry(sc2.body, ov2).grid(row=0, column=0, sticky="ew", padx=(0,8))
         hbtn(sc2.body, "찾기", lambda: self._save_dialog(ov2),
              C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
-
-        sv2 = tk.StringVar(value="")
-        pb2 = mkpb(f); pb2.pack(fill="x", pady=(0,3))
-        tk.Label(f, textvariable=sv2, font=F_SM, bg=C["bg"],
-                 fg=C["sub"], anchor="w").pack(fill="x")
 
         def _run():
             out = ov2.get().strip()
@@ -2244,8 +2266,9 @@ class PDFIkkcu(tk.Tk):
                     self.after(0, messagebox.showerror, "오류", str(e))
             threading.Thread(target=_wk, daemon=True).start()
 
-        hbtn(f, "  압축하여 저장  ", _run, C["primary"], C["pri_h"],
+        hbtn(bot, "  압축하여 저장  ", _run, C["primary"], C["pri_h"],
              pady=10).pack(fill="x", pady=(4,0))
+        self._dlg_center(dlg, 480)
 
     # ── 도장/서명 다이얼로그 ──────────────────────────────────
     def _vw_dlg_stamp(self):
@@ -2549,11 +2572,27 @@ class PDFIkkcu(tk.Tk):
             return str(v).strip()
 
         dlg = tk.Toplevel(self)
-        dlg.title("문서 속성 편집"); dlg.resizable(False, False); dlg.grab_set()
+        dlg.title("문서 속성 편집"); dlg.resizable(True, True); dlg.grab_set()
         dlg.configure(bg=C["bg"])
-        self._dlg_center(dlg, 500, 480)
+        dlg.minsize(420, 440)
 
-        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=12)
+        # Footer — pack BEFORE content
+        bot = tk.Frame(dlg, bg=C["bg"])
+        bot.pack(side="bottom", fill="x", padx=16, pady=(0,12))
+
+        oc = SectionCard(bot, "저장 위치"); oc.pack(fill="x", pady=(0,8))
+        oc.body.columnconfigure(0, weight=1)
+        ov = tk.StringVar(value=base + "_meta" + ext)
+        centry(oc.body, ov).grid(row=0, column=0, sticky="ew", padx=(0, 8))
+        hbtn(oc.body, "찾기", lambda: self._save_dialog(ov),
+             C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
+
+        sv = tk.StringVar(value="")
+        pb = mkpb(bot); pb.pack(fill="x", pady=(0, 3))
+        tk.Label(bot, textvariable=sv, font=F_SM, bg=C["bg"],
+                 fg=C["sub"], anchor="w").pack(fill="x")
+
+        f = tk.Frame(dlg, bg=C["bg"]); f.pack(fill="both", expand=True, padx=16, pady=(12,4))
 
         # File info
         ic = SectionCard(f, "파일"); ic.pack(fill="x", pady=(0, 8))
@@ -2599,19 +2638,6 @@ class PDFIkkcu(tk.Tk):
             centry(mc.body, v).grid(row=i, column=1, sticky="ew", pady=4)
             vars_map[key] = v
 
-        # Save location
-        oc = SectionCard(f, "저장 위치"); oc.pack(fill="x", pady=(0, 8))
-        oc.body.columnconfigure(0, weight=1)
-        ov = tk.StringVar(value=base + "_meta" + ext)
-        centry(oc.body, ov).grid(row=0, column=0, sticky="ew", padx=(0, 8))
-        hbtn(oc.body, "찾기", lambda: self._save_dialog(ov),
-             C["primary"], C["pri_h"], padx=8, pady=5).grid(row=0, column=1)
-
-        sv = tk.StringVar(value="")
-        pb = mkpb(f); pb.pack(fill="x", pady=(0, 3))
-        tk.Label(f, textvariable=sv, font=F_SM, bg=C["bg"],
-                 fg=C["sub"], anchor="w").pack(fill="x")
-
         def _run():
             out = ov.get().strip()
             if not out:
@@ -2639,8 +2665,9 @@ class PDFIkkcu(tk.Tk):
                     self.after(0, messagebox.showerror, "오류", str(e))
             threading.Thread(target=_wk, daemon=True).start()
 
-        hbtn(f, "  속성 저장  ", _run, C["primary"], C["pri_h"],
+        hbtn(bot, "  속성 저장  ", _run, C["primary"], C["pri_h"],
              pady=10).pack(fill="x", pady=(4, 0))
+        self._dlg_center(dlg, 500)
 
     # ── Page-edit extract helper (dialog-context) ─────────────
     def _pg_extract_via_dialog(self, thumb: "ThumbnailGrid",
