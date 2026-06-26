@@ -1,4 +1,4 @@
-"""PDF.ikkcu Tools — Freeware PDF Tool v2.2.1"""
+"""PDF.ikkcu Tools — Freeware PDF Tool v2.2.2"""
 from __future__ import annotations
 import re, os, sys, threading, webbrowser, tkinter as tk
 import tkinter.font as tkfont
@@ -662,7 +662,7 @@ class PDFIkkcu(tk.Tk):
 
         tk.Label(lf, text="PDF.ikkcu Tools", font=F_B,
                  bg=CH, fg="white").pack(side="left")
-        tk.Label(lf, text="v2.2.1", font=F_SM,
+        tk.Label(lf, text="v2.2.2", font=F_SM,
                  bg=CH, fg=CH_S).pack(side="left", padx=(6, 0))
 
         # Right controls
@@ -961,7 +961,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com", APP_URL),
-            ("버전",     "2.2.1",     None),
+            ("버전",     "2.2.2",     None),
             ("라이선스", "Freeware",  None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=2)
@@ -2685,7 +2685,7 @@ class PDFIkkcu(tk.Tk):
             folder = filedialog.askdirectory(parent=parent, title="이미지 저장 폴더")
             if not folder: return
             stem = os.path.splitext(os.path.basename(sources[0][0]))[0]
-            self._thread(self._pg_extract_images, sources, folder, stem, fmt.lower())
+            self._thread(self._pg_extract_images, sources, folder, stem, fmt.lower(), pb, sv)
 
     # ── TAB: 암호화 & 권한 제한 ──────────────────────────────
     def _build_enc_tab(self, parent):
@@ -3308,7 +3308,8 @@ class PDFIkkcu(tk.Tk):
             folder = filedialog.askdirectory(title="이미지 저장 폴더 선택")
             if not folder: return
             stem = os.path.splitext(os.path.basename(sources[0][0]))[0]
-            self._thread(self._pg_extract_images, sources, folder, stem, fmt.lower())
+            self._thread(self._pg_extract_images, sources, folder, stem, fmt.lower(),
+                         self.pg_pb, self.pg_sv)
 
     def _ask_extract_format(self) -> "str | None":
         result: list = [None]
@@ -3352,9 +3353,9 @@ class PDFIkkcu(tk.Tk):
         dlg.wait_window()
         return result[0]
 
-    def _pg_extract_images(self, sources: list, folder: str, stem: str, ext: str):
-        self.after(0, self.pg_pb.start, 10)
-        self.after(0, self.pg_sv.set, f"이미지 추출 중 ({ext.upper()})...")
+    def _pg_extract_images(self, sources: list, folder: str, stem: str, ext: str, pb, sv):
+        self.after(0, pb.start, 10)
+        self.after(0, sv.set, f"이미지 추출 중 ({ext.upper()})...")
         try:
             zoom = 200 / 72
             mat  = fitz.Matrix(zoom, zoom)
@@ -3371,11 +3372,11 @@ class PDFIkkcu(tk.Tk):
                 else:
                     img.save(out_path, format="PNG", optimize=True)
                 doc.close()
-            self.after(0, self._ok, self.pg_pb, self.pg_sv,
+            self.after(0, self._ok, pb, sv,
                        "완료",
                        f"{len(sources)}페이지 {ext.upper()} 추출 완료!\n\n폴더:\n{folder}")
         except Exception as e:
-            self.after(0, self._err, self.pg_pb, self.pg_sv, e)
+            self.after(0, self._err, pb, sv, e)
 
     def _pg_save(self):
         if self.thumb.page_count() == 0:
@@ -4219,7 +4220,7 @@ class PDFIkkcu(tk.Tk):
 
         for label, value, url in [
             ("개발",     "ikkcu.com",  APP_URL),
-            ("버전",     "2.2.1",      None),
+            ("버전",     "2.2.2",      None),
             ("라이선스", "Freeware",   None),
         ]:
             row = tk.Frame(body, bg=C["card"]); row.pack(fill="x", pady=3)
