@@ -1118,6 +1118,16 @@ class PDFIkkcu(_TK_BASE):  # type: ignore
         self._vw_th_imgs:   list = []                    # ImageTk refs
         self._vw_th_gen     = [0]                        # cancellation token
 
+        # ── 주석 상태 ─────────────────────────────────────────
+        self._vw_annot_mode  = "select"   # "select"|"highlight"|"underline"|"strikeout"|"note"|"rect"|"ink"
+        self._vw_annot_color = "#FFFF00"  # 현재 주석 색상
+        self._vw_drag_start  = None       # (cx, cy) 드래그 시작점
+        self._vw_ink_points  = []         # freehand 점 목록
+        self._vw_ink_id      = None       # canvas 임시 ink 아이디
+        self._vw_rect_id     = None       # canvas 임시 rect 아이디
+        self._vw_img_ox      = 0          # 이미지 캔버스 x 오프셋
+        self._vw_img_oy      = 0          # 이미지 캔버스 y 오프셋
+
         # ── Acrobat-style toolbar ─────────────────────────────
         TB_BG  = "#F0F0F0"
         TB_BTN = "#E0E0E0"
@@ -1192,6 +1202,42 @@ class PDFIkkcu(_TK_BASE):  # type: ignore
         self._vw_tools_shown = True
         self._vw_tool_btn = _icon_btn(" 도구 ◁", self._vw_toggle_tools, icon="tools", padx=6)
         self._vw_tool_btn.pack(side="left", padx=(2, 0))
+
+        # ── 주석 도구 ──────────────────────────────────────────
+        ttk.Separator(tb, orient="vertical").pack(side="left", fill="y", padx=6, pady=4)
+
+        self._vw_annot_btns = {}
+        annot_tools = [
+            ("select",    "↖",  "선택"),
+            ("highlight", "H",  "하이라이트"),
+            ("underline", "U",  "밑줄"),
+            ("strikeout", "S",  "취소선"),
+            ("note",      "📝", "메모"),
+            ("rect",      "□",  "사각형"),
+            ("ink",       "✏",  "자유 그리기"),
+        ]
+        for mode, sym, tip in annot_tools:
+            btn = tk.Button(tb, text=sym, font=F_B, width=2,
+                            bg=C["primary"] if mode == "select" else C["tab_bg"],
+                            fg="white",
+                            relief="flat", bd=0, padx=4, pady=4, cursor="hand2",
+                            command=lambda m=mode: self._vw_annot_set_mode(m))
+            btn.pack(side="left", padx=1)
+            self._vw_annot_btns[mode] = btn
+
+        # 색상 선택 버튼
+        self._vw_annot_color_btn = tk.Button(
+            tb, text="  ", bg="#FFFF00", relief="flat", bd=1,
+            width=2, padx=4, pady=4, cursor="hand2",
+            command=self._vw_annot_pick_color)
+        self._vw_annot_color_btn.pack(side="left", padx=(2, 0))
+
+        # 지우기 버튼
+        tk.Button(tb, text="🗑", font=F_B, width=2,
+                  bg=C["tab_bg"], fg="white", relief="flat", bd=0,
+                  padx=4, pady=4, cursor="hand2",
+                  command=self._vw_annot_delete_selected
+                  ).pack(side="left", padx=1)
 
         # ── Search group — right-anchored ─────────────────────
         # Result nav: ↑↓, hidden until search returns results
@@ -1356,10 +1402,17 @@ class PDFIkkcu(_TK_BASE):  # type: ignore
         self._vw_cv.bind("<Button-5>",
             lambda e: self._vw_cv.yview_scroll(1, "units"))
         self._vw_cv.bind("<Control-MouseWheel>", self._vw_ctrl_wheel)
-        self._vw_cv.bind("<Button-1>", lambda e: self._vw_cv.focus_set())
+        # <Button-1> 은 _vw_annot_press 에서 통합 처리 (focus_set 포함)
         self._vw_cv.bind("<Left>",  lambda e: self._vw_prev())
         self._vw_cv.bind("<Right>", lambda e: self._vw_next())
         self._vw_cv.bind("<Configure>", self._vw_on_resize)
+
+        # ── 주석 마우스 바인딩 ─────────────────────────────────
+        self._vw_cv.bind("<ButtonPress-1>",   self._vw_annot_press)
+        self._vw_cv.bind("<B1-Motion>",       self._vw_annot_drag)
+        self._vw_cv.bind("<ButtonRelease-1>", self._vw_annot_release)
+        self._vw_cv.bind("<Button-2>",        self._vw_annot_context)
+        self._vw_cv.bind("<Button-3>",        self._vw_annot_context)
 
         # Register as drag-and-drop target when tkinterdnd2 is available
         if _HAS_DND:
@@ -1493,6 +1546,8 @@ class PDFIkkcu(_TK_BASE):  # type: ignore
         cw  = max(cv.winfo_width(), 1)
         ix  = max(0, (cw - w) // 2)
         iy  = 8
+        self._vw_img_ox = ix
+        self._vw_img_oy = iy
         cv.delete("all")
         cv.create_image(ix, iy, image=self._vw_photo, anchor="nw", tags="page")
         cv.config(scrollregion=(0, 0, max(cw, w + 16), h + 16))
@@ -1764,6 +1819,271 @@ class PDFIkkcu(_TK_BASE):  # type: ignore
             self._vw_resize_id = self.after(150, self._vw_fit_page)
         else:
             self._vw_resize_id = self.after(150, self._vw_render)
+
+    # ══════════════════════════════════════════════════════════
+    # ── 주석 도구 ──────────────────────────────────────────────
+    # ══════════════════════════════════════════════════════════
+
+    def _vw_annot_set_mode(self, mode: str):
+        self._vw_annot_mode = mode
+        for m, btn in self._vw_annot_btns.items():
+            btn.config(bg=C["primary"] if m == mode else C["tab_bg"])
+        cursors = {
+            "select":    "arrow",
+            "highlight": "xterm",
+            "underline": "xterm",
+            "strikeout": "xterm",
+            "note":      "crosshair",
+            "rect":      "crosshair",
+            "ink":       "pencil",
+        }
+        self._vw_cv.config(cursor=cursors.get(mode, "arrow"))
+
+    def _vw_annot_pick_color(self):
+        from tkinter.colorchooser import askcolor
+        color = askcolor(self._vw_annot_color, title="주석 색상 선택")[1]
+        if color:
+            self._vw_annot_color = color
+            self._vw_annot_color_btn.config(bg=color)
+
+    def _vw_canvas_to_pdf(self, cx: float, cy: float) -> "fitz.Point":
+        px = cx - self._vw_img_ox + self._vw_mat_ox
+        py = cy - self._vw_img_oy + self._vw_mat_oy
+        return fitz.Point(px, py) * (~self._vw_mat)
+
+    def _vw_annot_press(self, event):
+        # 항상 포커스 확보 (기존 <Button-1> 역할)
+        self._vw_cv.focus_set()
+        if self._vw_annot_mode == "select" or not self._vw_doc:
+            return
+        cx = self._vw_cv.canvasx(event.x)
+        cy = self._vw_cv.canvasy(event.y)
+        self._vw_drag_start = (cx, cy)
+        self._vw_ink_points = [(cx, cy)]
+
+    def _vw_annot_drag(self, event):
+        if self._vw_annot_mode == "select" or not self._vw_doc:
+            return
+        if self._vw_drag_start is None:
+            return
+        cx = self._vw_cv.canvasx(event.x)
+        cy = self._vw_cv.canvasy(event.y)
+        x0, y0 = self._vw_drag_start
+
+        if self._vw_annot_mode == "ink":
+            self._vw_ink_points.append((cx, cy))
+            if self._vw_ink_id:
+                self._vw_cv.delete(self._vw_ink_id)
+            pts = self._vw_ink_points
+            if len(pts) >= 2:
+                flat = [c for p in pts for c in p]
+                self._vw_ink_id = self._vw_cv.create_line(
+                    *flat, fill=self._vw_annot_color, width=2, smooth=True)
+        elif self._vw_annot_mode == "rect":
+            if self._vw_rect_id:
+                self._vw_cv.delete(self._vw_rect_id)
+            col = self._vw_annot_color
+            self._vw_rect_id = self._vw_cv.create_rectangle(
+                x0, y0, cx, cy, outline=col, width=2)
+        else:
+            # highlight / underline / strikeout: 드래그 박스 미리보기
+            if self._vw_rect_id:
+                self._vw_cv.delete(self._vw_rect_id)
+            self._vw_rect_id = self._vw_cv.create_rectangle(
+                x0, y0, cx, cy, outline="#4488FF", width=1, dash=(4, 2))
+
+    def _vw_annot_release(self, event):
+        if self._vw_annot_mode == "select" or not self._vw_doc:
+            return
+        if self._vw_drag_start is None:
+            return
+
+        # 임시 캔버스 오버레이 제거
+        for _id in (self._vw_ink_id, self._vw_rect_id):
+            if _id:
+                self._vw_cv.delete(_id)
+        self._vw_ink_id = self._vw_rect_id = None
+
+        cx = self._vw_cv.canvasx(event.x)
+        cy = self._vw_cv.canvasy(event.y)
+        x0, y0 = self._vw_drag_start
+        self._vw_drag_start = None
+
+        page = self._vw_doc[self._vw_pg]
+        mode = self._vw_annot_mode
+
+        try:
+            if mode == "note":
+                pt = self._vw_canvas_to_pdf(cx, cy)
+                dlg = tk.Toplevel(self)
+                dlg.title("메모 입력"); dlg.resizable(False, False); dlg.grab_set()
+                self._dlg_center(dlg, 340, 180)
+                dlg.configure(bg=C["bg"])
+                tk.Label(dlg, text="메모 내용:", font=F, bg=C["bg"], fg=C["text"]
+                         ).pack(anchor="w", padx=16, pady=(14, 2))
+                txt = tk.Text(dlg, font=F, width=36, height=4,
+                              bg=C["card"], fg=C["text"], relief="flat",
+                              highlightbackground=C["border"], highlightthickness=1)
+                txt.pack(padx=16)
+                txt.focus_set()
+
+                def _ok_note():
+                    content = txt.get("1.0", "end").strip()
+                    dlg.destroy()
+                    if content:
+                        annot = page.add_text_annot(pt, content)
+                        self._vw_annot_apply_color(annot)
+                        self._vw_annot_save()
+                        self._vw_render()
+
+                def _key(e):
+                    if e.keysym == "Return" and (e.state & 0x4):  # Ctrl+Enter
+                        _ok_note()
+
+                txt.bind("<KeyPress>", _key)
+                bf = tk.Frame(dlg, bg=C["bg"])
+                bf.pack(fill="x", padx=16, pady=10)
+                hbtn(bf, "확인", _ok_note, C["primary"], C["pri_h"]).pack(side="right")
+                hbtn(bf, "취소", dlg.destroy, C["border"], C["border"],
+                     fg=C["text"]).pack(side="right", padx=(0, 6))
+
+            elif mode == "ink":
+                if len(self._vw_ink_points) < 2:
+                    return
+                pdf_pts = [self._vw_canvas_to_pdf(x, y)
+                           for x, y in self._vw_ink_points]
+                annot = page.add_ink_annot([pdf_pts])
+                self._vw_annot_apply_color(annot)
+                annot.set_border(width=2)
+                annot.update()
+                self._vw_annot_save()
+                self._vw_render()
+
+            elif mode == "rect":
+                p0 = self._vw_canvas_to_pdf(x0, y0)
+                p1 = self._vw_canvas_to_pdf(cx, cy)
+                rect = fitz.Rect(min(p0.x, p1.x), min(p0.y, p1.y),
+                                 max(p0.x, p1.x), max(p0.y, p1.y))
+                if rect.width < 2 or rect.height < 2:
+                    return
+                annot = page.add_rect_annot(rect)
+                self._vw_annot_apply_color(annot)
+                self._vw_annot_save()
+                self._vw_render()
+
+            else:  # highlight / underline / strikeout
+                p0 = self._vw_canvas_to_pdf(x0, y0)
+                p1 = self._vw_canvas_to_pdf(cx, cy)
+                sel_rect = fitz.Rect(min(p0.x, p1.x), min(p0.y, p1.y),
+                                     max(p0.x, p1.x), max(p0.y, p1.y))
+                if sel_rect.width < 2 or sel_rect.height < 2:
+                    return
+                words = page.get_text("words")
+                quads = []
+                for w in words:
+                    wr = fitz.Rect(w[:4])
+                    if not wr.intersects(sel_rect):
+                        continue
+                    quads.append(wr.quad)
+                if not quads:
+                    quads = [sel_rect.quad]
+                if mode == "highlight":
+                    annot = page.add_highlight_annot(quads)
+                elif mode == "underline":
+                    annot = page.add_underline_annot(quads)
+                else:  # strikeout
+                    annot = page.add_strikeout_annot(quads)
+                self._vw_annot_apply_color(annot)
+                self._vw_annot_save()
+                self._vw_render()
+
+        except Exception as e:
+            messagebox.showerror("주석 오류", str(e))
+
+    def _vw_annot_save(self):
+        """주석 변경 사항을 파일에 저장. saveIncr() 실패 시 일반 save() 시도."""
+        if not self._vw_doc:
+            return
+        try:
+            self._vw_doc.saveIncr()
+        except Exception:
+            try:
+                self._vw_doc.save(self._vw_path)
+            except Exception:
+                messagebox.showwarning(
+                    "저장 불가",
+                    "파일을 저장할 수 없습니다. 다른 이름으로 저장해 주세요.")
+
+    def _vw_annot_apply_color(self, annot):
+        """주석에 선택된 색상 적용."""
+        import re as _re
+        m = _re.fullmatch(
+            r'#([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})([0-9A-Fa-f]{2})',
+            self._vw_annot_color)
+        if not m:
+            return
+        r, g, b = (int(x, 16) / 255 for x in m.groups())
+        try:
+            annot.set_colors(stroke=(r, g, b))
+        except Exception:
+            pass
+        try:
+            t = annot.type[0]
+            if t in (8, 9, 10):  # Highlight / Underline / StrikeOut
+                annot.set_colors(stroke=(r, g, b))
+            elif t == 0:  # Text (sticky note)
+                annot.set_colors(stroke=(r, g, b))
+        except Exception:
+            pass
+        annot.update()
+
+    def _vw_annot_context(self, event):
+        """우클릭 → 주석 삭제 컨텍스트 메뉴."""
+        if not self._vw_doc:
+            return
+        cx = self._vw_cv.canvasx(event.x)
+        cy = self._vw_cv.canvasy(event.y)
+        pt = self._vw_canvas_to_pdf(cx, cy)
+        page = self._vw_doc[self._vw_pg]
+
+        hit = None
+        for annot in page.annots():
+            if annot.rect.contains(pt):
+                hit = annot
+                break
+        if not hit:
+            return
+
+        menu = tk.Menu(self, tearoff=0)
+        menu.add_command(label="주석 삭제",
+                         command=lambda: self._vw_annot_delete(page, hit))
+        menu.tk_popup(event.x_root, event.y_root)
+
+    def _vw_annot_delete(self, page, annot):
+        try:
+            page.delete_annot(annot)
+            self._vw_annot_save()
+            self._vw_render()
+        except Exception as e:
+            messagebox.showerror("삭제 오류", str(e))
+
+    def _vw_annot_delete_selected(self):
+        """현재 페이지의 모든 주석 삭제 (확인 후)."""
+        if not self._vw_doc:
+            return
+        page = self._vw_doc[self._vw_pg]
+        annots = list(page.annots())
+        if not annots:
+            messagebox.showinfo("주석 없음", "현재 페이지에 주석이 없습니다.")
+            return
+        if not messagebox.askyesno(
+                "주석 삭제",
+                f"현재 페이지의 주석 {len(annots)}개를 모두 삭제할까요?"):
+            return
+        for a in annots:
+            page.delete_annot(a)
+        self._vw_annot_save()
+        self._vw_render()
 
     # ══════════════════════════════════════════════════════════
     # ── 뷰어 통합 도구 패널 ────────────────────────────────────
